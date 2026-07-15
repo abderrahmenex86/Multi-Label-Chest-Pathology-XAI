@@ -1,5 +1,6 @@
 import argparse
 
+from src.download import execute_download
 from src.eda import execute_eda
 from src.engine import execute_training
 from src.infer import execute_inference
@@ -10,6 +11,7 @@ from src.utils import plot_comparative_metrics
 def parse_args():
     parser = argparse.ArgumentParser(description="Ex86 NIH Chest X-Ray Architecture")
 
+    parser.add_argument("--download", action="store_true")
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--overfit", action="store_true")
     parser.add_argument("--infer", action="store_true")
@@ -44,6 +46,9 @@ def parse_args():
 
 def main():
     config = parse_args()
+
+    if config.get("download"):
+        execute_download(config.get("data_csv"), config.get("dataset_directory"))
 
     if config.get("eda"):
         execute_eda(config.get("data_csv"), config.get("dataset_directory"), "docs/figs")
