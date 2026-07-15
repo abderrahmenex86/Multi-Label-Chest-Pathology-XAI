@@ -1,15 +1,31 @@
 import json
 import os
+import random
 from datetime import datetime
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from tqdm.auto import tqdm
 
 
-def log_message(category, message):
+def set_determinism(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def log_message(category, message, log_file=None):
     timestamp = datetime.now().strftime("%m/%d - %H:%M")
-    tqdm.write(f"[{category.upper()}] [{timestamp}] {message}")
+    formatted_message = f"[{category.upper()}] [{timestamp}] {message}"
+    tqdm.write(formatted_message)
+
+    if log_file:
+        with open(log_file, "a") as f:
+            f.write(formatted_message + "\n")
 
 
 def plot_pre_training_batch(images, labels, save_path):
@@ -36,12 +52,20 @@ def plot_pre_training_batch(images, labels, save_path):
 
 
 def plot_comparative_metrics(artifacts_dir, output_path):
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    if not os.path.exists(artifacts_dir):
+        log_message("error", f"Artifacts directory {artifacts_dir} missing.")
+        return
+
     run_directories = [
         os.path.join(artifacts_dir, d)
         for d in os.listdir(artifacts_dir)
         if os.path.isdir(os.path.join(artifacts_dir, d))
     ]
+    if not run_directories:
+        log_message("error", "No run directories found.")
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
     for run_path in sorted(run_directories):
         history_path = os.path.join(run_path, "model_history.json")
@@ -52,17 +76,17 @@ def plot_comparative_metrics(artifacts_dir, output_path):
             history = json.load(f)
 
         folder_name = os.path.basename(run_path)
-        epochs = range(1, len(history["train_loss"]) + 1)
+        epochs = range(1, len(history["val_auroc"]) + 1)
 
-        axes[0].plot(epochs, history["train_loss"], label=folder_name, linewidth=2)
-        axes[1].plot(epochs, history["val_loss"], label=folder_name, linewidth=2)
+        axes[0].plot(epochs, history["val_auroc"], label=folder_name, linewidth=2)
+        axes[1].plot(epochs, history["val_auprc"], label=folder_name, linewidth=2)
 
-    axes[0].set_title("Training BCE Loss")
+    axes[0].set_title("Validation AUROC")
     axes[0].set_xlabel("Epochs")
     axes[0].grid(True, linestyle="--", alpha=0.5)
     axes[0].legend()
 
-    axes[1].set_title("Validation BCE Loss")
+    axes[1].set_title("Validation AUPRC")
     axes[1].set_xlabel("Epochs")
     axes[1].grid(True, linestyle="--", alpha=0.5)
     axes[1].legend()
