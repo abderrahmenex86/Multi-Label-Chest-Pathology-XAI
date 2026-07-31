@@ -1,9 +1,12 @@
 import argparse
+import json
 import os
+from datetime import datetime
 
 import numpy
 import pandas
 import torch
+import torchinfo
 from torch.utils.data import DataLoader
 
 from dataset import ChestDataset
@@ -29,9 +32,17 @@ if __name__ == "__main__":
 
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    os.makedirs(args.artifacts, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M")
+    run_name = f"{timestamp}_{args.architecture}_lr{args.rate}_b{args.batch}"
+    run_dir = os.path.join(args.artifacts, run_name)
+    os.makedirs(run_dir, exist_ok=True)
+
+    with open(os.path.join(run_dir, "hyperparameters.json"), "w") as f:
+        json.dump(vars(args), f, indent=4)
 
     log("system", f"Executing on {device} using {args.architecture}")
+    log("system", f"Artifacts will be saved to {run_dir}")
 
     dataframe = pandas.read_csv(args.metadata)
     identifier = "Patient ID" if "Patient ID" in dataframe.columns else "Patient_ID"
@@ -75,9 +86,16 @@ if __name__ == "__main__":
     weights = torch.tensor(negatives / (positives + 1e-5), dtype=torch.float32).to(device)
 
     model = DenseNetMultiLabel(args.classes, args.architecture).to(device)
+
+    dummy = torch.randn(1, 3, args.height, args.width).to(device)
+    stats = torchinfo.summary(model, input_data=dummy, verbose=0)
+    with open(os.path.join(run_dir, "architecture.txt"), "w") as f:
+        f.write(str(stats))
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.rate)
     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weights).to(device)
 
+    history = {"train_loss": [], "val_loss": [], "val_auroc": [], "val_auprc": []}
     best = 0.0
 
     for epoch in range(1, args.epochs + 1):
@@ -91,8 +109,18 @@ if __name__ == "__main__":
             f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_metrics['loss']:.4f} | AUROC: {val_metrics['auroc']:.4f} | AUPRC: {val_metrics['auprc']:.4f}",
         )
 
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_metrics["loss"])
+        history["val_auroc"].append(val_metrics["auroc"])
+        history["val_auprc"].append(val_metrics["auprc"])
+
+        with open(os.path.join(run_dir, "history.json"), "w") as f:
+            json.dump(history, f, indent=4)
+
+        state = {"epoch": epoch, "model": model.state_dict(), "optimizer": optimizer.state_dict(), "best": best}
+        torch.save(state, os.path.join(run_dir, "last.pth"))
+
         if val_metrics["auroc"] > best:
             best = val_metrics["auroc"]
-            path = os.path.join(args.artifacts, "best.pth")
-            torch.save(model.state_dict(), path)
-            log("save", f"New best AUROC {best:.4f} saved to {path}")
+            torch.save(model.state_dict(), os.path.join(run_dir, "best.pth"))
+            log("save", f"New best AUROC {best:.4f} saved to {run_dir}")
