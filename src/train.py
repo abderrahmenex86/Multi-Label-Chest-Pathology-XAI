@@ -47,21 +47,6 @@ if __name__ == "__main__":
     log("system", f"Executing on {device} using {args.architecture}")
 
     dataframe = pandas.read_csv(args.metadata)
-    identifier = "Patient ID" if "Patient ID" in dataframe.columns else "Patient_ID"
-
-    unique = dataframe[identifier].unique()
-    numpy.random.shuffle(unique)
-
-    split = int(len(unique) * 0.80)
-    train_patients = unique[:split]
-
-    train_metadata = dataframe[dataframe[identifier].isin(train_patients)]
-    val_metadata = dataframe[~dataframe[identifier].isin(train_patients)]
-
-    train_dataset = ChestDataset(train_metadata, args.directory, args.width, args.height, augment=True)
-    train_loader = DataLoader(
-        train_dataset, batch_size=args.batch, shuffle=True, num_workers=4, pin_memory=True, drop_last=True
-    )
 
     columns = [
         "Atelectasis",
@@ -79,6 +64,30 @@ if __name__ == "__main__":
         "Pleural_Thickening",
         "Hernia",
     ]
+
+    if "Finding Labels" in dataframe.columns:
+        for col in columns:
+            if col not in dataframe.columns:
+                target = col.replace("_", " ")
+                dataframe[col] = (
+                    dataframe["Finding Labels"].str.contains(col) | dataframe["Finding Labels"].str.contains(target)
+                ).astype(float)
+
+    identifier = "Patient ID" if "Patient ID" in dataframe.columns else "Patient_ID"
+
+    unique = dataframe[identifier].unique()
+    numpy.random.shuffle(unique)
+
+    split = int(len(unique) * 0.80)
+    train_patients = unique[:split]
+
+    train_metadata = dataframe[dataframe[identifier].isin(train_patients)]
+    val_metadata = dataframe[~dataframe[identifier].isin(train_patients)]
+
+    train_dataset = ChestDataset(train_metadata, args.directory, args.width, args.height, augment=True)
+    train_loader = DataLoader(
+        train_dataset, batch_size=args.batch, shuffle=True, num_workers=4, pin_memory=True, drop_last=True
+    )
 
     positives = train_metadata[columns].sum().values
     negatives = len(train_metadata) - positives
