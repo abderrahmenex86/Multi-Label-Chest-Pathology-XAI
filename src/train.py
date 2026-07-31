@@ -11,14 +11,15 @@ import torchinfo
 from torch.utils.data import DataLoader
 
 from dataset import ChestDataset
+from download import execute_download
 from engine import evaluate, train_epoch
 from model import DenseNetMultiLabel
 from utils import log, seed_everything
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--metadata", required=True)
-    parser.add_argument("--directory", required=True)
+    parser.add_argument("--metadata", default="data/Data_Entry_2017.csv")
+    parser.add_argument("--directory", default="data/images")
     parser.add_argument("--artifacts", default="artifacts")
     parser.add_argument("--architecture", default="densenet121")
     parser.add_argument("--seed", type=int, default=42)
@@ -30,10 +31,18 @@ if __name__ == "__main__":
     parser.add_argument("--width", type=int, default=224)
     parser.add_argument("--height", type=int, default=224)
     parser.add_argument("--sanity", action="store_true")
+    parser.add_argument("--download", action="store_true")
     args = parser.parse_args()
 
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if args.download:
+        execute_download(args.metadata, args.directory)
+
+    if not os.path.exists(args.metadata):
+        log("error", f"Metadata missing at {args.metadata}. Use --download flag.")
+        sys.exit(1)
 
     log("system", f"Executing on {device} using {args.architecture}")
 
