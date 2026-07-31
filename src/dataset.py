@@ -6,7 +6,6 @@ import pandas
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
-from tqdm import tqdm
 
 cv2.setNumThreads(0)
 
@@ -56,19 +55,28 @@ class ChestDataset(Dataset):
 
         if self.cache:
             image_tensor = self.images[index]
+            rgb = image_tensor.permute(1, 2, 0).numpy()
         else:
             filename = record["Image Index"] if "Image Index" in record else record["Image_Index"]
             path = os.path.join(self.directory, filename)
             bgr = cv2.imread(path, cv2.IMREAD_COLOR)
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-            resized = cv2.resize(rgb, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
-            image_tensor = torch.from_numpy(resized).permute(2, 0, 1)
+            rgb = cv2.resize(rgb, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
 
         if self.augment:
             if numpy.random.rand() > 0.5:
-                image_tensor = torch.flip(image_tensor, dims=[2])
+                rgb = cv2.flip(rgb, 1)
 
-        tensor = image_tensor.float() / 255.0
+            angle = numpy.random.uniform(-15, 15)
+            center = (self.width // 2, self.height // 2)
+            matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+            rgb = cv2.warpAffine(rgb, matrix, (self.width, self.height))
+
+            alpha = numpy.random.uniform(0.8, 1.2)
+            beta = numpy.random.uniform(-15, 15)
+            rgb = cv2.convertScaleAbs(rgb, alpha=alpha, beta=beta)
+
+        tensor = torch.from_numpy(rgb).permute(2, 0, 1).float() / 255.0
         inputs = self.normalize(tensor)
         targets = torch.tensor([float(record[col]) for col in self.columns], dtype=torch.float32)
 
