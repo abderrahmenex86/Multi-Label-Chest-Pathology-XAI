@@ -70,7 +70,8 @@ if __name__ == "__main__":
             if col not in dataframe.columns:
                 target = col.replace("_", " ")
                 dataframe[col] = (
-                    dataframe["Finding Labels"].str.contains(col) | dataframe["Finding Labels"].str.contains(target)
+                    dataframe["Finding Labels"].str.contains(col, regex=False)
+                    | dataframe["Finding Labels"].str.contains(target, regex=False)
                 ).astype(float)
 
     identifier = "Patient ID" if "Patient ID" in dataframe.columns else "Patient_ID"
