@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument("--architecture", default="densenet121")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch", type=int, default=64)
+    parser.add_argument("--batch", type=int, default=256)
     parser.add_argument("--rate", type=float, default=1e-4)
     parser.add_argument("--clip", type=float, default=1.0)
     parser.add_argument("--classes", type=int, default=14)
@@ -92,10 +92,10 @@ if __name__ == "__main__":
         train_dataset,
         batch_size=args.batch,
         shuffle=True,
-        num_workers=12,
+        num_workers=16,
         pin_memory=True,
         persistent_workers=True,
-        prefetch_factor=4,
+        prefetch_factor=2,
         drop_last=True,
     )
 
@@ -103,10 +103,10 @@ if __name__ == "__main__":
         val_dataset,
         batch_size=args.batch,
         shuffle=False,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True,
         persistent_workers=True,
-        prefetch_factor=4,
+        prefetch_factor=2,
     )
 
     positives = train_metadata[columns].sum().values
