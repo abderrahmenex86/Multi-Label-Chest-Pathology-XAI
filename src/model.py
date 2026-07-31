@@ -8,7 +8,7 @@ from torchvision.models import (
 
 
 class DenseNetMultiLabel(torch.nn.Module):
-    def __init__(self, classes, architecture="densenet121"):
+    def __init__(self, classes, architecture="densenet121", freeze=False):
         super().__init__()
 
         if architecture == "densenet161":
@@ -18,6 +18,10 @@ class DenseNetMultiLabel(torch.nn.Module):
 
         in_features = self.backbone.classifier.in_features
         self.backbone.classifier = torch.nn.Linear(in_features, classes)
+
+        if freeze:
+            for parameter in self.backbone.features.parameters():
+                parameter.requires_grad = False
 
     def forward(self, inputs):
         return self.backbone(inputs)
