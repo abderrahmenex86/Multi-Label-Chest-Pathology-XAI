@@ -92,10 +92,10 @@ if __name__ == "__main__":
         train_dataset,
         batch_size=args.batch,
         shuffle=True,
-        num_workers=8,
+        num_workers=12,
         pin_memory=True,
         persistent_workers=True,
-        prefetch_factor=2,
+        prefetch_factor=4,
         drop_last=True,
     )
 
@@ -103,10 +103,10 @@ if __name__ == "__main__":
         val_dataset,
         batch_size=args.batch,
         shuffle=False,
-        num_workers=8,
+        num_workers=4,
         pin_memory=True,
         persistent_workers=True,
-        prefetch_factor=2,
+        prefetch_factor=4,
     )
 
     positives = train_metadata[columns].sum().values
