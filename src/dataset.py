@@ -37,8 +37,7 @@ class ChestDataset(Dataset):
             self.transform = v2.Compose(
                 [
                     v2.RandomHorizontalFlip(p=0.5),
-                    v2.RandomRotation(degrees=15),
-                    v2.ColorJitter(brightness=0.2, contrast=0.2),
+                    v2.RandomRotation(degrees=7),
                     v2.ToDtype(torch.float32, scale=True),
                     v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ]
