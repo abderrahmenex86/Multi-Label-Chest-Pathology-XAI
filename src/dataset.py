@@ -1,5 +1,6 @@
 import os
 
+import pandas
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
@@ -51,7 +52,8 @@ class ChestDataset(Dataset):
 
     def __getitem__(self, index):
         record = self.records[index]
-        path = os.path.join(self.directory, record["Image_Index"])
+        filename = record["Image Index"] if "Image Index" in record else record["Image_Index"]
+        path = os.path.join(self.directory, filename)
         image = Image.open(path).convert("RGB")
         inputs = self.transform(image)
         targets = torch.tensor([float(record[col]) for col in self.columns], dtype=torch.float32)
