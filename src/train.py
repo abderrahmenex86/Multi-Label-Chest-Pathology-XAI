@@ -28,7 +28,7 @@ if __name__ == "__main__":
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--rate", type=float, default=1e-4)
-    parser.add_argument("--decay", type=float, default=1e-1)
+    parser.add_argument("--decay", type=float, default=1e-4)
     parser.add_argument("--clip", type=float, default=1.0)
     parser.add_argument("--classes", type=int, default=14)
     parser.add_argument("--width", type=int, default=320)
