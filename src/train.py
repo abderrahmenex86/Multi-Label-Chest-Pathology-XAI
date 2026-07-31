@@ -23,8 +23,9 @@ if __name__ == "__main__":
     parser.add_argument("--artifacts", default="artifacts")
     parser.add_argument("--architecture", default="densenet121")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch", type=int, default=256)
+    parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--patience", type=int, default=5)
+    parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--rate", type=float, default=1e-4)
     parser.add_argument("--clip", type=float, default=1.0)
     parser.add_argument("--classes", type=int, default=14)
@@ -92,7 +93,7 @@ if __name__ == "__main__":
         train_dataset,
         batch_size=args.batch,
         shuffle=True,
-        num_workers=16,
+        num_workers=8,
         pin_memory=True,
         persistent_workers=True,
         prefetch_factor=2,
@@ -111,14 +112,16 @@ if __name__ == "__main__":
 
     positives = train_metadata[columns].sum().values
     negatives = len(train_metadata) - positives
-    weights = torch.tensor(negatives / (positives + 1e-5), dtype=torch.float32).to(device)
+    raw_weights = torch.tensor(negatives / (positives + 1e-5), dtype=torch.float32)
+    weights = torch.clamp(raw_weights, max=10.0).to(device)
 
     model = DenseNetMultiLabel(args.classes, args.architecture).to(device)
 
     if device.type == "cuda" and hasattr(torch, "compile"):
         model = torch.compile(model)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.rate)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.rate, weight_decay=1e-2)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weights).to(device)
 
     if args.sanity:
@@ -152,16 +155,19 @@ if __name__ == "__main__":
 
     history = {"train_loss": [], "val_loss": [], "val_auroc": [], "val_auprc": []}
     best = 0.0
+    stagnant = 0
 
     for epoch in range(1, args.epochs + 1):
         log("train", f"Starting Epoch {epoch}")
 
         train_loss = train_epoch(model, train_loader, optimizer, criterion, device, args.clip)
+        scheduler.step()
+
         val_metrics = evaluate(model, val_loader, criterion, device, args.classes)
 
         log(
             "eval",
-            f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_metrics['loss']:.4f} | AUROC: {val_metrics['auroc']:.4f} | AUPRC: {val_metrics['auprc']:.4f}",
+            f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_metrics['loss']:.4f} | AUROC: {val_metrics['auroc']:.4f} | AUPRC: {val_metrics['auprc']:.4f} | LR: {scheduler.get_last_lr()[0]:.2e}",
         )
 
         history["train_loss"].append(train_loss)
@@ -178,5 +184,12 @@ if __name__ == "__main__":
 
         if val_metrics["auroc"] > best:
             best = val_metrics["auroc"]
+            stagnant = 0
             torch.save(raw_state, os.path.join(run_dir, "best.pth"))
             log("save", f"New best AUROC {best:.4f} saved to {run_dir}")
+        else:
+            stagnant += 1
+
+        if stagnant >= args.patience:
+            log("stop", f"Early stopping triggered at epoch {epoch}. Best AUROC: {best:.4f}")
+            break
