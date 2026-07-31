@@ -3,6 +3,7 @@ from datetime import datetime
 
 import numpy
 import torch
+from tqdm import tqdm
 
 
 def seed_everything(seed):
@@ -16,4 +17,4 @@ def seed_everything(seed):
 
 def log(category, message):
     timestamp = datetime.now().strftime("%m/%d - %H:%M")
-    print(f"[{category.upper()}] [{timestamp}] {message}")
+    tqdm.write(f"[{category.upper()}] [{timestamp}] {message}")
