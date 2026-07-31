@@ -99,13 +99,16 @@ if __name__ == "__main__":
     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weights).to(device)
 
     if args.sanity:
-        log("sanity", "Initiating continuous single-batch overfit loop")
+        log("sanity", "Initiating single-batch overfit loop")
         batch = next(iter(train_loader))
         loader = [batch]
+        step = 0
 
         while True:
+            step += 1
             loss = train_epoch(model, loader, optimizer, criterion, device, args.clip)
-            log("sanity", f"Loss: {loss:.4f}")
+            if step == 1 or step % 10 == 0:
+                log("sanity", f"Step {step} | Loss: {loss:.4f}")
 
         sys.exit(0)
 
