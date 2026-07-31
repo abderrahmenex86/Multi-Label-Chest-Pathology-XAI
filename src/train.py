@@ -14,7 +14,7 @@ from dataset import ChestDataset
 from download import execute_download
 from engine import evaluate, train_epoch
 from model import DenseNetMultiLabel
-from utils import log, seed_everything
+from utils import log, plot_augmentation_steps, seed_everything
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -24,13 +24,16 @@ if __name__ == "__main__":
     parser.add_argument("--architecture", default="densenet121")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--rate", type=float, default=1e-4)
+    parser.add_argument("--decay", type=float, default=1e-1)
     parser.add_argument("--clip", type=float, default=1.0)
     parser.add_argument("--classes", type=int, default=14)
-    parser.add_argument("--width", type=int, default=224)
-    parser.add_argument("--height", type=int, default=224)
+    parser.add_argument("--width", type=int, default=320)
+    parser.add_argument("--height", type=int, default=320)
+    parser.add_argument("--freeze", action="store_true")
     parser.add_argument("--sanity", action="store_true")
     parser.add_argument("--download", action="store_true")
     args = parser.parse_args()
@@ -45,7 +48,7 @@ if __name__ == "__main__":
         log("error", f"Metadata missing at {args.metadata}. Use --download flag.")
         sys.exit(1)
 
-    log("system", f"Executing on {device} using {args.architecture}")
+    log("system", f"Executing on {device} using {args.architecture} at {args.width}x{args.height}")
 
     dataframe = pandas.read_csv(args.metadata)
 
@@ -86,6 +89,19 @@ if __name__ == "__main__":
     train_metadata = dataframe[dataframe[identifier].isin(train_patients)]
     val_metadata = dataframe[~dataframe[identifier].isin(train_patients)]
 
+    sample_image = os.path.join(
+        args.directory,
+        (
+            train_metadata.iloc[0]["Image Index"]
+            if "Image Index" in train_metadata.columns
+            else train_metadata.iloc[0]["Image_Index"]
+        ),
+    )
+    if os.path.exists(sample_image):
+        figure_path = os.path.join("docs", "figs", "pre_train_augmentation.png")
+        plot_augmentation_steps(sample_image, figure_path, args.width, args.height)
+        log("system", f"Augmentation visualization saved to {figure_path}")
+
     train_dataset = ChestDataset(train_metadata, args.directory, args.width, args.height, augment=True)
     val_dataset = ChestDataset(val_metadata, args.directory, args.width, args.height, augment=False)
 
@@ -115,13 +131,22 @@ if __name__ == "__main__":
     raw_weights = torch.tensor(negatives / (positives + 1e-5), dtype=torch.float32)
     weights = torch.clamp(raw_weights, max=10.0).to(device)
 
-    model = DenseNetMultiLabel(args.classes, args.architecture).to(device)
+    model = DenseNetMultiLabel(args.classes, args.architecture, freeze=args.freeze).to(device)
 
     if device.type == "cuda" and hasattr(torch, "compile"):
         model = torch.compile(model)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.rate, weight_decay=1e-2)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
+    trainable_parameters = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(trainable_parameters, lr=args.rate, weight_decay=args.decay)
+
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, total_iters=args.warmup)
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=args.epochs - args.warmup, eta_min=1e-6
+    )
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer, schedulers=[warmup_scheduler, cosine_scheduler], milestones=[args.warmup]
+    )
+
     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weights).to(device)
 
     if args.sanity:
