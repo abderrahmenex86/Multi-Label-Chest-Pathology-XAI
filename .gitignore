@@ -1,7 +1,6 @@
 plot.py
 
 *.sh
-*.txt
 *.ipynb
 temp_*
 *.pyc
