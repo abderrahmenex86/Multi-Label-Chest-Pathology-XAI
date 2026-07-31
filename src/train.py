@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument("--architecture", default="densenet121")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch", type=int, default=32)
+    parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--rate", type=float, default=1e-4)
     parser.add_argument("--clip", type=float, default=1.0)
     parser.add_argument("--classes", type=int, default=14)
@@ -86,8 +86,27 @@ if __name__ == "__main__":
     val_metadata = dataframe[~dataframe[identifier].isin(train_patients)]
 
     train_dataset = ChestDataset(train_metadata, args.directory, args.width, args.height, augment=True)
+    val_dataset = ChestDataset(val_metadata, args.directory, args.width, args.height, augment=False)
+
     train_loader = DataLoader(
-        train_dataset, batch_size=args.batch, shuffle=True, num_workers=4, pin_memory=True, drop_last=True
+        train_dataset,
+        batch_size=args.batch,
+        shuffle=True,
+        num_workers=8,
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=2,
+        drop_last=True,
+    )
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=args.batch,
+        shuffle=False,
+        num_workers=8,
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=2,
     )
 
     positives = train_metadata[columns].sum().values
@@ -95,6 +114,10 @@ if __name__ == "__main__":
     weights = torch.tensor(negatives / (positives + 1e-5), dtype=torch.float32).to(device)
 
     model = DenseNetMultiLabel(args.classes, args.architecture).to(device)
+
+    if device.type == "cuda" and hasattr(torch, "compile"):
+        model = torch.compile(model)
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.rate)
     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weights).to(device)
 
@@ -122,11 +145,8 @@ if __name__ == "__main__":
 
     log("system", f"Artifacts will be saved to {run_dir}")
 
-    val_dataset = ChestDataset(val_metadata, args.directory, args.width, args.height, augment=False)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch, shuffle=False, num_workers=2, pin_memory=True)
-
     dummy = torch.randn(1, 3, args.height, args.width).to(device)
-    stats = torchinfo.summary(model, input_data=dummy, verbose=0)
+    stats = torchinfo.summary(getattr(model, "_orig_mod", model), input_data=dummy, verbose=0)
     with open(os.path.join(run_dir, "architecture.txt"), "w") as f:
         f.write(str(stats))
 
@@ -152,10 +172,11 @@ if __name__ == "__main__":
         with open(os.path.join(run_dir, "history.json"), "w") as f:
             json.dump(history, f, indent=4)
 
-        state = {"epoch": epoch, "model": model.state_dict(), "optimizer": optimizer.state_dict(), "best": best}
+        raw_state = getattr(model, "_orig_mod", model).state_dict()
+        state = {"epoch": epoch, "model": raw_state, "optimizer": optimizer.state_dict(), "best": best}
         torch.save(state, os.path.join(run_dir, "last.pth"))
 
         if val_metrics["auroc"] > best:
             best = val_metrics["auroc"]
-            torch.save(model.state_dict(), os.path.join(run_dir, "best.pth"))
+            torch.save(raw_state, os.path.join(run_dir, "best.pth"))
             log("save", f"New best AUROC {best:.4f} saved to {run_dir}")
