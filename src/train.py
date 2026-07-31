@@ -16,6 +16,7 @@ if __name__ == "__main__":
     parser.add_argument("--metadata", required=True)
     parser.add_argument("--directory", required=True)
     parser.add_argument("--artifacts", default="artifacts")
+    parser.add_argument("--architecture", default="densenet121")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch", type=int, default=32)
@@ -30,7 +31,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs(args.artifacts, exist_ok=True)
 
-    log("system", f"Executing on {device}")
+    log("system", f"Executing on {device} using {args.architecture}")
 
     dataframe = pandas.read_csv(args.metadata)
     identifier = "Patient ID" if "Patient ID" in dataframe.columns else "Patient_ID"
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     negatives = len(train_metadata) - positives
     weights = torch.tensor(negatives / (positives + 1e-5), dtype=torch.float32).to(device)
 
-    model = DenseNetMultiLabel(args.classes).to(device)
+    model = DenseNetMultiLabel(args.classes, args.architecture).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.rate)
     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weights).to(device)
 
