@@ -80,11 +80,11 @@ if __name__ == "__main__":
     ]
 
     model = DenseNetMultiLabel(hyperparameters["classes"], hyperparameters["architecture"]).to(device)
-    model.load_state_dict(torch.load(weights_path, map_location=device))
+    model.load_state_dict(torch.load(weights_path, map_location=device), strict=False)
     model.eval()
 
-    model.backbone.features.register_forward_hook(save_activation)
-    model.backbone.features.register_full_backward_hook(save_gradient)
+    model.target_layer.register_forward_hook(save_activation)
+    model.target_layer.register_full_backward_hook(save_gradient)
 
     output_dir = os.path.join(target_run, "predictions")
     os.makedirs(output_dir, exist_ok=True)
