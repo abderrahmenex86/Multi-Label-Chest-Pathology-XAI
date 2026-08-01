@@ -33,6 +33,10 @@ if __name__ == "__main__":
     parser.add_argument("--classes", type=int, default=14)
     parser.add_argument("--width", type=int, default=320)
     parser.add_argument("--height", type=int, default=320)
+    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--prefetch", type=int, default=2)
+    parser.add_argument("--disable-pin", action="store_true")
+    parser.add_argument("--disable-persistent", action="store_true")
     parser.add_argument("--freeze", action="store_true")
     parser.add_argument("--cache", action="store_true")
     parser.add_argument("--sanity", action="store_true")
@@ -108,14 +112,19 @@ if __name__ == "__main__":
     )
     val_dataset = ChestDataset(val_metadata, args.directory, args.width, args.height, augment=False, cache=args.cache)
 
+    workers = args.workers
+    prefetch = args.prefetch if workers > 0 else None
+    persistent = (not args.disable_persistent) if workers > 0 else False
+    pin = not args.disable_pin
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch,
         shuffle=True,
-        num_workers=8,
-        pin_memory=True,
-        persistent_workers=True,
-        prefetch_factor=2,
+        num_workers=workers,
+        pin_memory=pin,
+        persistent_workers=persistent,
+        prefetch_factor=prefetch,
         drop_last=True,
     )
 
@@ -123,10 +132,10 @@ if __name__ == "__main__":
         val_dataset,
         batch_size=args.batch,
         shuffle=False,
-        num_workers=8,
-        pin_memory=True,
-        persistent_workers=True,
-        prefetch_factor=2,
+        num_workers=workers,
+        pin_memory=pin,
+        persistent_workers=persistent,
+        prefetch_factor=prefetch,
     )
 
     positives = train_metadata[columns].sum().values
