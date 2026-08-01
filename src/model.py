@@ -49,4 +49,10 @@ class DenseNetMultiLabel(torch.nn.Module):
                 parameter.requires_grad = False
 
     def forward(self, inputs):
+        if "densenet" in self.architecture:
+            features = self.backbone.features(inputs)
+            out = torch.relu(features)
+            out = torch.nn.functional.adaptive_avg_pool2d(out, (1, 1))
+            out = torch.flatten(out, 1)
+            return self.backbone.classifier(out)
         return self.backbone(inputs)
