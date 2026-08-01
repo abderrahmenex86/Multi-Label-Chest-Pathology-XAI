@@ -34,6 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--width", type=int, default=320)
     parser.add_argument("--height", type=int, default=320)
     parser.add_argument("--freeze", action="store_true")
+    parser.add_argument("--cache", action="store_true")
     parser.add_argument("--sanity", action="store_true")
     parser.add_argument("--download", action="store_true")
     args = parser.parse_args()
@@ -102,8 +103,10 @@ if __name__ == "__main__":
         plot_augmentation_steps(sample_image, figure_path, args.width, args.height)
         log("system", f"Augmentation visualization saved to {figure_path}")
 
-    train_dataset = ChestDataset(train_metadata, args.directory, args.width, args.height, augment=True)
-    val_dataset = ChestDataset(val_metadata, args.directory, args.width, args.height, augment=False)
+    train_dataset = ChestDataset(
+        train_metadata, args.directory, args.width, args.height, augment=True, cache=args.cache
+    )
+    val_dataset = ChestDataset(val_metadata, args.directory, args.width, args.height, augment=False, cache=args.cache)
 
     train_loader = DataLoader(
         train_dataset,
