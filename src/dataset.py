@@ -1,6 +1,7 @@
 import os
 
 import cv2
+import pandas
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
@@ -10,7 +11,7 @@ cv2.setNumThreads(0)
 
 
 class ChestDataset(Dataset):
-    def __init__(self, metadata, directory, width, height, augment, cache=True):
+    def __init__(self, metadata, directory, width, height, augment, cache=False):
         self.directory = directory
         self.width = width
         self.height = height
