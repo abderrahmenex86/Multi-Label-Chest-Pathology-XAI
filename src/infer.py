@@ -6,7 +6,7 @@ import cv2
 import numpy
 import pandas
 import torch
-from PIL import Image
+import torch.nn.functional as F
 from torchvision import transforms
 
 from model import DenseNetMultiLabel
@@ -112,7 +112,7 @@ if __name__ == "__main__":
         ]
     )
 
-    log("infer", f"Generating Grad-CAM overlays for {len(positive_samples)} sample images...")
+    log("infer", f"Generating HiResCAM overlays for {len(positive_samples)} sample images...")
 
     for index, row in positive_samples.iterrows():
         filename = row["Image Index"] if "Image Index" in row else row["Image_Index"]
@@ -141,22 +141,23 @@ if __name__ == "__main__":
 
         logits[0, target_index].backward()
 
-        weights = torch.mean(gradients, dim=[2, 3], keepdim=True)
-        cam = torch.sum(weights * activations, dim=1).squeeze().detach().cpu().numpy()
-        cam = numpy.maximum(cam, 0)
+        rectified_activations = F.relu(activations)
+        hires_cam = torch.sum(F.relu(gradients * rectified_activations), dim=1).squeeze().detach().cpu().numpy()
 
-        max_value = numpy.max(cam)
+        max_value = numpy.max(hires_cam)
         if max_value > 0:
-            cam = cam / max_value
+            hires_cam = hires_cam / max_value
 
-        resized_cam = cv2.resize(cam, (width, height), interpolation=cv2.INTER_LINEAR)
+        hires_cam[hires_cam < 0.20] = 0.0
+
+        resized_cam = cv2.resize(hires_cam, (width, height), interpolation=cv2.INTER_LINEAR)
         scaled_cam = numpy.uint8(255 * resized_cam)
         colored = cv2.applyColorMap(scaled_cam, cv2.COLORMAP_JET)
 
         overlay = cv2.addWeighted(raw_bgr, 0.6, colored, 0.4, 0)
 
         header = numpy.zeros((40, width * 2, 3), dtype=numpy.uint8)
-        text = f"Pred: {target_class} ({score*100:.1f}%)"
+        text = f"Pred: {target_class} ({score*100:.1f}%) [HiResCAM]"
         cv2.putText(header, text, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         combined = numpy.hstack((raw_bgr, overlay))
@@ -165,4 +166,4 @@ if __name__ == "__main__":
         output_path = os.path.join(output_dir, f"{os.path.splitext(filename)[0]}_{target_class}.png")
         cv2.imwrite(output_path, final_output)
 
-    log("infer", f"Grad-CAM evaluation maps saved to {output_dir}")
+    log("infer", f"HiResCAM evaluation maps saved to {output_dir}")
