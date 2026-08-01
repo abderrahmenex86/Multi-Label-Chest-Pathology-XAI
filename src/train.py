@@ -149,7 +149,12 @@ if __name__ == "__main__":
         model = torch.compile(model)
 
     trainable_parameters = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(trainable_parameters, lr=args.rate, weight_decay=args.decay)
+    fused_support = device.type == "cuda" and "fused" in torch.optim.AdamW.__init__.__code__.co_varnames
+
+    if fused_support:
+        optimizer = torch.optim.AdamW(trainable_parameters, lr=args.rate, weight_decay=args.decay, fused=True)
+    else:
+        optimizer = torch.optim.AdamW(trainable_parameters, lr=args.rate, weight_decay=args.decay)
 
     warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, total_iters=args.warmup)
     cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
