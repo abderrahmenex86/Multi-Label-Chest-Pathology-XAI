@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Activity, Sparkles, RefreshCw, Play } from 'lucide-react';
-import { FileDropzone } from './components/FileDropzone';
+import { Activity, Sparkles, Github } from 'lucide-react';
 import { ImageCanvas } from './components/ImageCanvas';
-import { Controls } from './components/Controls';
 import { ResultsPanel } from './components/ResultsPanel';
+import { ActionIsland } from './components/ActionIsland';
 import type { Prediction, AnalysisPayload } from './types';
 
 export const App: React.FC = () => {
@@ -12,6 +11,7 @@ export const App: React.FC = () => {
     const [heatmap, setHeatmap] = useState<string | null>(null);
     const [predictions, setPredictions] = useState<Prediction[]>([]);
     const [opacity, setOpacity] = useState<number>(0.5);
+    const [threshold, setThreshold] = useState<number>(0.2);
     const [target, setTarget] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
 
@@ -59,78 +59,69 @@ export const App: React.FC = () => {
     };
 
     return (
-        <div className='h-screen max-h-screen overflow-hidden flex flex-col bg-ink-black-950 font-sans p-4 gap-3'>
-            <header className='flex flex-row justify-between items-center pb-2 shrink-0'>
+        <div className='h-screen max-h-screen overflow-hidden flex flex-col bg-slate-dark text-pure-white font-sans p-4 gap-3'>
+            <header className='flex flex-row justify-between items-center pb-2 border-b border-steel-blue/30 shrink-0'>
                 <div className='flex items-center gap-3'>
+                    <div className='p-2 bg-coral-orange rounded-xl text-pure-white shadow-md'>
+                        <Activity className='w-5 h-5' />
+                    </div>
                     <div>
-                        <h1 className='font-heading text-lg font-bold text-school-bus-yellow-400'>
-                            Multi Label Chest Pathology Visualizer with XAI
+                        <h1 className='font-heading text-lg font-bold text-pure-white'>
+                            Chest Pathology Visualizer
                         </h1>
-                        <p className='text-xs text-school-bus-yellow-200'>
+                        <p className='text-xs text-silver-gray'>
                             Deep Learning & HiResCAM Explainability Diagnostic
                             Workspace
                         </p>
                     </div>
                 </div>
+                <div className='flex items-center gap-2 px-3 py-1 bg-steel-blue/20 border border-steel-blue/40 rounded-full text-xs font-mono text-coral-orange'>
+                    <Sparkles className='w-3.5 h-3.5' />
+                    <span>DenseNet / ConvNeXt</span>
+                </div>
             </header>
 
             <div className='flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0 overflow-hidden'>
-                <div className='lg:col-span-8 flex flex-col gap-3 min-h-0 h-full'>
+                <div className='lg:col-span-9 flex flex-col min-h-0 h-full'>
                     <ImageCanvas
                         preview={preview}
                         heatmap={heatmap}
                         opacity={opacity}
                     />
-
-                    <div className='flex items-center gap-3 h-14 shrink-0'>
-                        <FileDropzone
-                            onFileSelect={handleFileSelect}
-                            selectedFile={file}
-                        />
-
-                        <div className='flex-1 h-14 flex items-center'>
-                            <button
-                                onClick={() => analyze(target)}
-                                disabled={loading || !file}
-                                className='w-full h-full cursor-pointer bg-prussian-blue-600 hover:bg-prussian-blue-500 disabled:bg-ink-black-950 disabled:text-ink-black-400 disabled:border-ink-black-800 disabled:border text-white font-heading font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 px-4'>
-                                {loading ?
-                                    <>
-                                        <RefreshCw className='w-4 h-4 animate-spin text-prussian-blue-400' />
-                                        <span>
-                                            Analyzing & Generating Heatmap...
-                                        </span>
-                                    </>
-                                :   <>
-                                        <Play className='w-4 h-4 fill-current' />
-                                        <span>
-                                            {file ?
-                                                'Run Pathology Analysis'
-                                            :   'Upload Image First'}
-                                        </span>
-                                    </>
-                                }
-                            </button>
-                        </div>
-                    </div>
                 </div>
 
-                <div className='lg:col-span-4 flex flex-col gap-3 min-h-0 h-full'>
+                <div className='lg:col-span-3 flex flex-col gap-3 min-h-0 h-full'>
                     <ResultsPanel
                         predictions={predictions}
-                        target={target}
-                        onSelectTarget={handleTargetChange}
-                    />
-
-                    <Controls
                         opacity={opacity}
                         setOpacity={setOpacity}
+                        threshold={threshold}
+                        setThreshold={setThreshold}
                         target={target}
-                        predictions={predictions}
-                        onTargetChange={handleTargetChange}
+                        onSelectTarget={handleTargetChange}
                         disabled={loading || !heatmap}
+                    />
+
+                    <ActionIsland
+                        onFileSelect={handleFileSelect}
+                        selectedFile={file}
+                        onSubmit={() => analyze(target)}
+                        loading={loading}
                     />
                 </div>
             </div>
+
+            <footer className='pt-2 border-t border-steel-blue/30 flex items-center justify-between text-xs font-sans text-silver-gray shrink-0'>
+                <span>made with love, by humans.</span>
+                <a
+                    href='https://github.com/abderrahmenex86'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='flex items-center gap-1.5 text-coral-orange hover:underline font-mono'>
+                    <Github className='w-3.5 h-3.5' />
+                    <span>@github.com/abderrahmenex86</span>
+                </a>
+            </footer>
         </div>
     );
 };
