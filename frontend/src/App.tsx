@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Activity, Sparkles } from 'lucide-react';
 import { ImageCanvas } from './components/ImageCanvas';
 import { ResultsPanel } from './components/ResultsPanel';
 import { ActionIsland } from './components/ActionIsland';
@@ -11,7 +10,6 @@ export const App: React.FC = () => {
     const [heatmap, setHeatmap] = useState<string | null>(null);
     const [predictions, setPredictions] = useState<Prediction[]>([]);
     const [opacity, setOpacity] = useState<number>(0.5);
-    const [threshold, setThreshold] = useState<number>(0.2);
     const [target, setTarget] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
 
@@ -61,23 +59,14 @@ export const App: React.FC = () => {
     return (
         <div className='h-screen max-h-screen overflow-hidden flex flex-col bg-slate-dark text-pure-white font-sans p-4 gap-3'>
             <header className='flex flex-row justify-between items-center pb-2 border-b border-steel-blue/30 shrink-0'>
-                <div className='flex items-center gap-3'>
-                    <div className='p-2 bg-coral-orange rounded-xl text-pure-white shadow-md'>
-                        <Activity className='w-5 h-5' />
-                    </div>
-                    <div>
-                        <h1 className='font-heading text-lg font-bold text-pure-white'>
-                            Chest Pathology Visualizer
-                        </h1>
-                        <p className='text-xs text-silver-gray'>
-                            Deep Learning & HiResCAM Explainability Diagnostic
-                            Workspace
-                        </p>
-                    </div>
-                </div>
-                <div className='flex items-center gap-2 px-3 py-1 bg-steel-blue/20 border border-steel-blue/40 rounded-full text-xs font-mono text-coral-orange'>
-                    <Sparkles className='w-3.5 h-3.5' />
-                    <span>DenseNet / ConvNeXt</span>
+                <div>
+                    <h1 className='font-heading text-lg font-bold text-pure-white'>
+                        Chest Pathology Visualizer
+                    </h1>
+                    <p className='text-xs text-silver-gray'>
+                        Deep Learning & HiResCAM Explainability Diagnostic
+                        Workspace
+                    </p>
                 </div>
             </header>
 
@@ -95,8 +84,6 @@ export const App: React.FC = () => {
                         predictions={predictions}
                         opacity={opacity}
                         setOpacity={setOpacity}
-                        threshold={threshold}
-                        setThreshold={setThreshold}
                         target={target}
                         onSelectTarget={handleTargetChange}
                         disabled={loading || !heatmap}
