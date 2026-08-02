@@ -177,11 +177,3 @@ npm run dev
 ```
 
 Open `http://localhost:5173` in your browser.
-
-______________________________________________________________________
-
-## License
-
-Distributed under the MIT License. See `LICENSE` for details.
-
-Made with love, by humans. [@github.com/abderrahmenex86](https://github.com/abderrahmenex86)
