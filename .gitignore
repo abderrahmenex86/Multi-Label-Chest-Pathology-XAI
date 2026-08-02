@@ -1,4 +1,7 @@
 plot.py
+compare.py
+find.py
+conf_matrices.py
 
 *.sh
 *.ipynb
