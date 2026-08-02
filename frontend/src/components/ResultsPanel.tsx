@@ -1,13 +1,11 @@
 import React from 'react';
-import { Activity, ShieldAlert, Sliders, Layers } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 import type { Prediction } from '../types';
 
 interface ResultsPanelProps {
     predictions: Prediction[];
     opacity: number;
     setOpacity: (val: number) => void;
-    threshold: number;
-    setThreshold: (val: number) => void;
     target: string;
     onSelectTarget: (name: string) => void;
     disabled: boolean;
@@ -17,25 +15,20 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     predictions,
     opacity,
     setOpacity,
-    threshold,
-    setThreshold,
     target,
     onSelectTarget,
     disabled,
 }) => {
     const filtered = predictions.filter(
-        (item) => item.probability >= threshold
+        (item) => item.probability >= item.threshold
     );
 
     return (
         <div className='flex-1 min-h-0 flex flex-col gap-3 p-4 bg-slate-dark rounded-xl border border-steel-blue/40'>
             <div className='flex items-center justify-between pb-2 border-b border-steel-blue/30 shrink-0'>
-                <div className='flex items-center gap-2 text-coral-orange'>
-                    <Activity className='w-4 h-4' />
-                    <h3 className='font-heading font-semibold text-xs text-pure-white uppercase tracking-wider'>
-                        Pathology Findings
-                    </h3>
-                </div>
+                <h3 className='font-heading font-semibold text-xs text-pure-white uppercase tracking-wider'>
+                    Pathology Findings
+                </h3>
                 <span className='text-xs font-mono text-silver-gray'>
                     {filtered.length} detected
                 </span>
@@ -51,7 +44,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
 
                 {predictions.length > 0 && filtered.length === 0 && (
                     <div className='py-8 text-center text-xs font-sans text-silver-gray'>
-                        No active pathologies above threshold.
+                        No active pathologies detected above threshold.
                     </div>
                 )}
 
@@ -101,61 +94,30 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                 })}
             </div>
 
-            <div className='pt-3 border-t border-steel-blue/30 flex flex-col gap-2.5 shrink-0'>
-                <div className='flex items-center gap-1.5 text-coral-orange'>
-                    <Sliders className='w-3.5 h-3.5' />
-                    <span className='font-heading font-semibold text-xs text-pure-white uppercase tracking-wider'>
-                        Sliders & Filters
-                    </span>
-                </div>
+            <div className='pt-3 border-t border-steel-blue/30 flex flex-col gap-2 shrink-0'>
+                <span className='font-heading font-semibold text-xs text-pure-white uppercase tracking-wider'>
+                    Visualization
+                </span>
 
-                <div className='grid grid-cols-2 gap-3'>
-                    <div className='flex flex-col gap-1'>
-                        <div className='flex justify-between items-center text-xs font-sans'>
-                            <label className='flex items-center gap-1 text-silver-gray text-xs'>
-                                <Layers className='w-3 h-3 text-coral-orange' />
-                                Opacity
-                            </label>
-                            <span className='text-pure-white font-mono font-bold'>
-                                {Math.round(opacity * 100)}%
-                            </span>
-                        </div>
-                        <input
-                            type='range'
-                            min='0'
-                            max='1'
-                            step='0.02'
-                            value={opacity}
-                            onChange={(e) =>
-                                setOpacity(parseFloat(e.target.value))
-                            }
-                            disabled={disabled}
-                            className='w-full h-1.5 bg-steel-blue/30 rounded-lg appearance-none cursor-pointer accent-coral-orange disabled:opacity-40'
-                        />
+                <div className='flex flex-col gap-1'>
+                    <div className='flex justify-between items-center text-xs font-sans'>
+                        <label className='text-silver-gray text-xs'>
+                            Opacity
+                        </label>
+                        <span className='text-pure-white font-mono font-bold'>
+                            {Math.round(opacity * 100)}%
+                        </span>
                     </div>
-
-                    <div className='flex flex-col gap-1'>
-                        <div className='flex justify-between items-center text-xs font-sans'>
-                            <label className='text-silver-gray text-xs'>
-                                Threshold
-                            </label>
-                            <span className='text-pure-white font-mono font-bold'>
-                                {Math.round(threshold * 100)}%
-                            </span>
-                        </div>
-                        <input
-                            type='range'
-                            min='0'
-                            max='1'
-                            step='0.05'
-                            value={threshold}
-                            onChange={(e) =>
-                                setThreshold(parseFloat(e.target.value))
-                            }
-                            disabled={disabled}
-                            className='w-full h-1.5 bg-steel-blue/30 rounded-lg appearance-none cursor-pointer accent-coral-orange disabled:opacity-40'
-                        />
-                    </div>
+                    <input
+                        type='range'
+                        min='0'
+                        max='1'
+                        step='0.02'
+                        value={opacity}
+                        onChange={(e) => setOpacity(parseFloat(e.target.value))}
+                        disabled={disabled}
+                        className='w-full h-1.5 bg-steel-blue/30 rounded-lg appearance-none cursor-pointer accent-coral-orange disabled:opacity-40'
+                    />
                 </div>
             </div>
         </div>
