@@ -1,10 +1,13 @@
+fastapi
 matplotlib
-kaggle
 numpy
 opencv_python
 pandas
+Pillow
+seaborn
 torch
 torchinfo
 torchmetrics
 torchvision
 tqdm
+uvicorn
