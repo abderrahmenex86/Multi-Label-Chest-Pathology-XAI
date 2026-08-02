@@ -1,0 +1,67 @@
+@import 'tailwindcss';
+
+@theme {
+    --font-sans: 'Inter', sans-serif;
+    --font-heading: 'Plus Jakarta Sans', sans-serif;
+    --font-mono: 'Geist Mono', monospace;
+
+    --color-ink-black-50: #e5f0ff;
+    --color-ink-black-100: #cce0ff;
+    --color-ink-black-200: #99c2ff;
+    --color-ink-black-300: #66a3ff;
+    --color-ink-black-400: #3385ff;
+    --color-ink-black-500: #0066ff;
+    --color-ink-black-600: #0052cc;
+    --color-ink-black-700: #003d99;
+    --color-ink-black-800: #002966;
+    --color-ink-black-900: #001433;
+    --color-ink-black-950: #000e24;
+
+    --color-prussian-blue-50: #e5f2ff;
+    --color-prussian-blue-100: #cce5ff;
+    --color-prussian-blue-200: #99caff;
+    --color-prussian-blue-300: #66b0ff;
+    --color-prussian-blue-400: #3396ff;
+    --color-prussian-blue-500: #007bff;
+    --color-prussian-blue-600: #0063cc;
+    --color-prussian-blue-700: #004a99;
+    --color-prussian-blue-800: #003166;
+    --color-prussian-blue-900: #001933;
+    --color-prussian-blue-950: #001124;
+
+    --color-regal-navy-50: #e5f3ff;
+    --color-regal-navy-100: #cce6ff;
+    --color-regal-navy-200: #99ceff;
+    --color-regal-navy-300: #66b5ff;
+    --color-regal-navy-400: #339cff;
+    --color-regal-navy-500: #0084ff;
+    --color-regal-navy-600: #0069cc;
+    --color-regal-navy-700: #004f99;
+    --color-regal-navy-800: #003566;
+    --color-regal-navy-900: #001a33;
+    --color-regal-navy-950: #001224;
+
+    --color-school-bus-yellow-50: #fff9e5;
+    --color-school-bus-yellow-100: #fff3cc;
+    --color-school-bus-yellow-200: #ffe799;
+    --color-school-bus-yellow-300: #ffdb66;
+    --color-school-bus-yellow-400: #ffcf33;
+    --color-school-bus-yellow-500: #ffc300;
+    --color-school-bus-yellow-600: #cc9c00;
+    --color-school-bus-yellow-700: #997500;
+    --color-school-bus-yellow-800: #664e00;
+    --color-school-bus-yellow-900: #332700;
+    --color-school-bus-yellow-950: #241b00;
+
+    --color-gold-50: #fffbe5;
+    --color-gold-100: #fff6cc;
+    --color-gold-200: #ffee99;
+    --color-gold-300: #ffe666;
+    --color-gold-400: #ffdd33;
+    --color-gold-500: #ffd500;
+    --color-gold-600: #ccaa00;
+    --color-gold-700: #998000;
+    --color-gold-800: #665500;
+    --color-gold-900: #332b00;
+    --color-gold-950: #241e00;
+}
