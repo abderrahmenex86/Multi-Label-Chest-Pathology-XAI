@@ -29,22 +29,37 @@ The pipeline trains on the **NIH ChestX-ray14** dataset (112,120 chest radiograp
 
 ### Class Distribution
 
-| Pathology Class | Positive Count | Prevalence (%) |
-| :--- | :--- | :--- |
-| **Infiltration** | 19,894 | 17.7% |
-| **Effusion** | 13,317 | 11.9% |
-| **Atelectasis** | 11,559 | 10.3% |
-| **Nodule** | 6,331 | 5.6% |
-| **Mass** | 5,782 | 5.2% |
-| **Pneumothorax** | 5,302 | 4.7% |
-| **Consolidation** | 4,667 | 4.2% |
-| **Pleural Thickening** | 3,385 | 3.0% |
-| **Cardiomegaly** | 2,776 | 2.5% |
-| **Emphysema** | 2,516 | 2.2% |
-| **Edema** | 2,303 | 2.1% |
-| **Fibrosis** | 1,686 | 1.5% |
-| **Pneumonia** | 1,431 | 1.3% |
-| **Hernia** | 227 | 0.2% |
+<!-- | Pathology Class | Positive Count | Prevalence (%) | -->
+
+<!-- | :--- | :--- | :--- | -->
+
+<!-- | **Infiltration** | 19,894 | 17.7% | -->
+
+<!-- | **Effusion** | 13,317 | 11.9% | -->
+
+<!-- | **Atelectasis** | 11,559 | 10.3% | -->
+
+<!-- | **Nodule** | 6,331 | 5.6% | -->
+
+<!-- | **Mass** | 5,782 | 5.2% | -->
+
+<!-- | **Pneumothorax** | 5,302 | 4.7% | -->
+
+<!-- | **Consolidation** | 4,667 | 4.2% | -->
+
+<!-- | **Pleural Thickening** | 3,385 | 3.0% | -->
+
+<!-- | **Cardiomegaly** | 2,776 | 2.5% | -->
+
+<!-- | **Emphysema** | 2,516 | 2.2% | -->
+
+<!-- | **Edema** | 2,303 | 2.1% | -->
+
+<!-- | **Fibrosis** | 1,686 | 1.5% | -->
+
+<!-- | **Pneumonia** | 1,431 | 1.3% | -->
+
+<!-- | **Hernia** | 227 | 0.2% | -->
 
 ![Class Distribution](docs/figs/eda_class_distribution.png)
 
@@ -118,44 +133,6 @@ HiResCAM computes the element-wise product of positive gradients and activations
 
 ______________________________________________________________________
 
-## Project Structure
-
-```text
-Multi-Label-Chest-Pathology-XAI/
-├── backend/
-│ ├── engine.py # Model loader, HiResCAM generator, Base64 PNG buffer
-│ └── main.py # FastAPI server, CORS, /api/v1/predict endpoint
-├── frontend/
-│ ├── index.html # Vite HTML template
-│ ├── package.json # React, Vite, Tailwind CSS v4, Lucide dependencies
-│ ├── vite.config.ts # Vite configuration with @tailwindcss/vite
-│ └── src/
-│ ├── App.tsx # Dashboard layout, state orchestration, API client
-│ ├── index.css # Tailwind v4 @theme color palette (#2D3142, #EF8354, etc.)
-│ ├── types.ts # TypeScript prediction interfaces
-│ └── components/
-│ ├── ActionIsland.tsx # Side-by-side Upload and Submit action island
-│ ├── ImageCanvas.tsx # Left 3/4 viewport base X-ray + heatmap canvas
-│ └── ResultsPanel.tsx # Upper right island pathology list & opacity slider
-├── src/
-│ ├── compare.py # Multi-run comparative performance plotting
-│ ├── conf_matrices.py # 14-panel 2x2 confusion matrix grid exporter
-│ ├── dataset.py # OpenCV image reader & torchvision v2 transforms
-│ ├── download.py # Automated NIH Box direct split archive downloader
-│ ├── eda.py # Exploratory data analysis plot generator
-│ ├── engine.py # PyTorch bfloat16 mixed precision training & evaluation loops
-│ ├── find.py # Youden J statistic per-class optimal threshold search
-│ ├── infer.py # Local batch HiResCAM image evaluation script
-│ ├── model.py # Multi-backbone factory (DenseNet, ConvNeXt, ResNet, EfficientNet)
-│ ├── plot.py # Single-run history curve plotter
-│ ├── train.py # Main training CLI script with early stopping & CUDA Fused AdamW
-│ └── utils.py # Determinism seeding, logging, & augmentation plotter
-└── docs/
-└── figs/ # Generated publication-quality figures & overlays
-```
-
-______________________________________________________________________
-
 ## Quickstart Guide
 
 ### 1. Environment Setup
@@ -182,23 +159,7 @@ python src/train.py --download --sanity
 Train a ConvNeXt-Small model at $320 \\times 320$ resolution:
 
 ```bash
-python src/train.py --architecture convnext_small --batch 64 --epochs 30 --patience 5
-```
-
-### 4. Evaluation & Analysis
-
-```bash
-# Generate EDA figures
-python src/eda.py
-
-# Calculate optimal decision thresholds
-python src/find.py
-
-# Export 14-panel confusion matrix grid
-python src/conf_matrices.py
-
-# Plot comparative benchmarks across all experiment runs
-python src/compare.py
+python src/train.py --architecture convnext_small --batch 64 --epochs 50
 ```
 
 ### 5. Launch FastAPI Backend
