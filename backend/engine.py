@@ -1,8 +1,9 @@
+import base64
+import io
+import json
 import os
 import sys
-import io
-import base64
-import json
+
 import cv2
 import numpy
 import torch
@@ -11,8 +12,8 @@ from PIL import Image
 from torchvision import transforms
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
-from utils import seed_everything
 from model import DenseNetMultiLabel
+from utils import seed_everything
 
 seed_everything(42)
 
@@ -46,9 +47,16 @@ def get_latest_run(artifacts="artifacts"):
 
 target_run = get_latest_run()
 
+optimal_thresholds = {}
+
 if target_run:
     with open(os.path.join(target_run, "hyperparameters.json"), "r") as handle:
         hyperparameters = json.load(handle)
+
+    thresholds_path = os.path.join(target_run, "optimal_thresholds.json")
+    if os.path.exists(thresholds_path):
+        with open(thresholds_path, "r") as handle:
+            optimal_thresholds = json.load(handle)
 
     model = DenseNetMultiLabel(hyperparameters["classes"], hyperparameters["architecture"]).to(device)
     model.load_state_dict(torch.load(os.path.join(target_run, "best.pth"), map_location=device), strict=False)
@@ -95,7 +103,10 @@ def predict(buffer, target):
     logits = model(inputs)
     probabilities = torch.sigmoid(logits).squeeze(0)
 
-    results = [{"name": name, "probability": float(prob)} for name, prob in zip(labels, probabilities)]
+    results = [
+        {"name": name, "probability": float(prob), "threshold": optimal_thresholds.get(name, 0.20)}
+        for name, prob in zip(labels, probabilities)
+    ]
     results.sort(key=lambda item: item["probability"], reverse=True)
 
     if target is None or target == "" or target not in labels:
