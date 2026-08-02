@@ -1,4 +1,4 @@
-# Multi-Label Chest Pathology XAI & Visualizer
+# Multi-Label Chest Pathology XAI
 
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat&logo=pytorch)](https://pytorch.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
