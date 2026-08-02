@@ -1,7 +1,9 @@
 import argparse
+
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+
 import engine
 
 app = FastAPI()
@@ -21,7 +23,7 @@ def health():
 
 
 @app.post("/api/v1/predict")
-async def predict(request):
+async def predict(request: Request):
     form = await request.form()
     upload = form["file"]
     target = form.get("target", None)
