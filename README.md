@@ -91,7 +91,3 @@ epochs without improvement.
 ## Stack
 
 Python · PyTorch · torchvision · FastAPI · React 19 · Tailwind v4
-
-## Licence
-
-MIT. See [LICENSE](LICENSE).
