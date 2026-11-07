@@ -150,6 +150,10 @@ Useful options:
   320x320 and 45-50 GB at 448x448 depending on the split; use it only on a
   machine with enough memory. `--cache-workers` controls the parallel fill
   threads; 8-16 is reasonable on a high-core machine.
+- `--cache-val` also caches the validation split. It is only ~3.5 GB at 320,
+  ~5 GB at 384, and ~6.8 GB at 448, so it is cheap on a large-RAM machine.
+- `--val-batch 64` uses a larger forward-only batch for validation and test.
+  This is usually safe because validation does not store gradients.
 - `--no-compile` disables `torch.compile`.
 - `--no-pretrained` skips the ImageNet download for offline or smoke-test runs.
 

@@ -55,12 +55,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-compile", action="store_true")
     parser.add_argument("--no-pretrained", action="store_true", help="Skip ImageNet weights (offline/smoke tests).")
     parser.add_argument("--freeze", action="store_true")
-    parser.add_argument("--cache", action="store_true")
+    parser.add_argument("--cache", action="store_true", help="Cache the training split in RAM.")
+    parser.add_argument(
+        "--cache-val",
+        action="store_true",
+        help="Cache the validation split in RAM (roughly 5 GB at 384x384).",
+    )
     parser.add_argument(
         "--cache-workers",
         type=int,
         default=8,
         help="Threads used to fill the RAM cache.",
+    )
+    parser.add_argument(
+        "--val-batch",
+        type=int,
+        default=0,
+        help="Validation/test batch size; defaults to --batch.",
     )
     parser.add_argument("--sanity", action="store_true")
     parser.add_argument("--sanity-steps", type=int, default=20)
@@ -74,7 +85,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def build_loader(dataset, args, shuffle: bool, drop_last: bool = False) -> DataLoader:
+def build_loader(
+    dataset,
+    args,
+    shuffle: bool,
+    drop_last: bool = False,
+    batch_size: int | None = None,
+) -> DataLoader:
     workers = args.workers
     prefetch = args.prefetch if workers > 0 else None
     persistent = (not args.disable_persistent) if workers > 0 else False
@@ -82,7 +99,7 @@ def build_loader(dataset, args, shuffle: bool, drop_last: bool = False) -> DataL
 
     return DataLoader(
         dataset,
-        batch_size=args.batch,
+        batch_size=batch_size or args.batch,
         shuffle=shuffle,
         num_workers=workers,
         persistent_workers=persistent,
@@ -107,6 +124,8 @@ def main() -> int:
         raise SystemExit("--accumulate must be at least 1.")
     if args.cache_workers < 1:
         raise SystemExit("--cache-workers must be at least 1.")
+    if args.val_batch < 0:
+        raise SystemExit("--val-batch must be non-negative.")
 
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -157,7 +176,13 @@ def main() -> int:
         cache_workers=args.cache_workers,
     )
     val_dataset = ChestDataset(
-        split.validation, args.directory, args.width, args.height, augment=False, cache=False
+        split.validation,
+        args.directory,
+        args.width,
+        args.height,
+        augment=False,
+        cache=args.cache_val,
+        cache_workers=args.cache_workers,
     )
     test_dataset = (
         ChestDataset(split.test, args.directory, args.width, args.height, augment=False, cache=False)
@@ -168,10 +193,18 @@ def main() -> int:
     if args.cache:
         estimated_gb = len(train_dataset) * 3 * args.width * args.height / 1e9
         log("warning", f"RAM cache for the training split is approximately {estimated_gb:.1f} GB.")
+    if args.cache_val:
+        estimated_gb = len(val_dataset) * 3 * args.width * args.height / 1e9
+        log("warning", f"RAM cache for the validation split is approximately {estimated_gb:.1f} GB.")
 
     train_loader = build_loader(train_dataset, args, shuffle=True, drop_last=len(train_dataset) >= args.batch)
-    val_loader = build_loader(val_dataset, args, shuffle=False)
-    test_loader = build_loader(test_dataset, args, shuffle=False) if test_dataset is not None else None
+    eval_batch = args.val_batch or args.batch
+    val_loader = build_loader(val_dataset, args, shuffle=False, batch_size=eval_batch)
+    test_loader = (
+        build_loader(test_dataset, args, shuffle=False, batch_size=eval_batch)
+        if test_dataset is not None
+        else None
+    )
 
     positives = split.train[list(LABELS)].sum().values
     negatives = len(split.train) - positives

@@ -66,11 +66,14 @@ python -m src.train \
   --architecture convnext_base \
   --width 384 --height 384 \
   --batch 32 --accumulate 2 \
+  --cache --cache-val --cache-workers 16 \
+  --val-batch 64 --workers 12 --prefetch 4 \
   --epochs 8 --patience 3
 ```
 
 The effective batch is 64. The 3090 supports bf16 natively; the pipeline falls
-back to fp32 on GPUs without bf16.
+back to fp32 on GPUs without bf16. Validation is cached separately (~5 GB at
+384x384) and uses a forward-only batch of 64.
 
 ## 4. Thresholds and per-class metrics
 
