@@ -121,6 +121,14 @@ def main() -> int:
 
     probabilities = np.concatenate(outputs, axis=0)
     actual = np.concatenate(targets, axis=0)
+    predictions_path = run_dir / f"predictions_{args.split}.npz"
+    np.savez_compressed(
+        predictions_path,
+        probabilities=probabilities.astype(np.float32),
+        targets=actual.astype(np.float32),
+        labels=np.asarray(LABELS),
+    )
+
     auroc_values = auroc.compute().detach().cpu().tolist()
     auprc_values = auprc.compute().detach().cpu().tolist()
     thresholds = load_thresholds(run_dir)
@@ -171,6 +179,7 @@ def main() -> int:
     output_path.write_text(json.dumps(payload, indent=4) + "\n")
 
     log("save", f"Per-class metrics saved to {output_path}")
+    log("save", f"Raw predictions saved to {predictions_path}")
     for label in LABELS:
         row = per_class[label]
         auroc_text = "n/a" if row["auroc"] is None else f"{row['auroc']:.4f}"

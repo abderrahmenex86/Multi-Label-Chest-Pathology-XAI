@@ -238,7 +238,11 @@ python -m src.evaluate --run artifacts/<run> --split test
 # 3. Confusion-matrix grid using the tuned thresholds.
 python -m src.conf_matrices --run artifacts/<run> --split test
 
-# 4. Training-curve and experiment comparison figures.
+# 4. Comprehensive report: training curves, per-class bars, ROC/PR,
+#    comparison with older runs, summary JSON/Markdown.
+python -m src.report --run artifacts/<run>
+
+# 5. Training-curve and experiment comparison figures.
 python -m src.compare
 python -m src.plot --run artifacts/<run>
 ```
@@ -345,6 +349,7 @@ src/
   labels.py         single label list
   model.py          torchvision backbones
   predictor.py      shared inference and CAM
+  report.py         training report, ROC/PR, comparisons
   runs.py           run discovery and validation
   splits.py         patient-level splitting
   train.py          training entry point

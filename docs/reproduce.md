@@ -81,11 +81,18 @@ back to fp32 on GPUs without bf16. Validation is cached separately (~5 GB at
 python -m src.find --run artifacts/<run>
 python -m src.evaluate --run artifacts/<run> --split test
 python -m src.conf_matrices --run artifacts/<run> --split test
+python -m src.report --run artifacts/<run>
 ```
 
 `src.find` tunes thresholds on validation only. `src.evaluate` and
 `src.conf_matrices` default to the test split so the operating point is not
-reported on the data used to choose it.
+reported on the data used to choose it. `src.evaluate` also saves
+`predictions_test.npz` (or `predictions_val.npz`), which `src.report` uses for
+per-class ROC and precision-recall curves.
+
+Every run also writes `run_info.json`, `split_stats.json`, `history.json`,
+`best_meta.json`, and `test_metrics.json` so the report can be generated later
+without rerunning inference.
 
 For an older 80/20 run, `--split test` is empty; use `--split val` and label the
 result as validation.

@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
+import socket
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -274,8 +277,17 @@ def main() -> int:
 
     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weights).to(device)
 
-    history = {"train_loss": [], "val_loss": [], "val_auroc": [], "val_auprc": []}
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+        "val_auroc": [],
+        "val_auprc": [],
+        "lr": [],
+        "epoch_seconds": [],
+        "gpu_mem_gb": [],
+    }
     best = 0.0
+    best_epoch: int | None = None
     stagnant = 0
     start_epoch = 1
 
@@ -285,6 +297,7 @@ def main() -> int:
         if "scheduler" in resume_checkpoint:
             scheduler.load_state_dict(resume_checkpoint["scheduler"])
         best = float(resume_checkpoint.get("best", 0.0))
+        best_epoch = resume_checkpoint.get("best_epoch")
         stagnant = int(resume_checkpoint.get("stagnant", 0))
         start_epoch = int(resume_checkpoint.get("epoch", 0)) + 1
         saved_history = resume_checkpoint.get("history")
@@ -348,6 +361,47 @@ def main() -> int:
         + "\n"
     )
 
+    run_started = time.perf_counter()
+    run_info = {
+        "run": run_name,
+        "status": "running",
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+        "git_commit": get_git_commit(),
+        "system": {
+            "hostname": socket.gethostname(),
+            "platform": platform.platform(),
+            "python": platform.python_version(),
+            "torch": torch.__version__,
+            "cuda": torch.version.cuda,
+            "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
+            "gpu_memory_gb": (
+                torch.cuda.get_device_properties(0).total_memory / 1e9
+                if device.type == "cuda"
+                else None
+            ),
+            "cpu_count": os.cpu_count(),
+        },
+        "args": vars(args),
+    }
+    (run_dir / "run_info.json").write_text(json.dumps(run_info, indent=4) + "\n")
+
+    split_stats = {}
+    for split_name, frame, patients in (
+        ("train", split.train, split.train_patients),
+        ("validation", split.validation, split.validation_patients),
+        ("test", split.test, split.test_patients),
+    ):
+        positives = frame[list(LABELS)].sum()
+        split_stats[split_name] = {
+            "images": len(frame),
+            "patients": len(patients),
+            "positives": {label: int(positives[label]) for label in LABELS},
+            "prevalence": {
+                label: float(positives[label]) / max(len(frame), 1) for label in LABELS
+            },
+        }
+    (run_dir / "split_stats.json").write_text(json.dumps(split_stats, indent=4) + "\n")
+
     log("system", f"Artifacts will be saved to {run_dir}")
 
     sample_image = os.path.join(
@@ -367,8 +421,12 @@ def main() -> int:
     stats = torchinfo.summary(raw_model, input_data=dummy, verbose=0)
     (run_dir / "architecture.txt").write_text(str(stats) + "\n")
 
+    early_stopped = False
     for epoch in range(start_epoch, args.epochs + 1):
         log("train", f"Starting Epoch {epoch}")
+        epoch_start = time.perf_counter()
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats()
 
         train_loss = train_epoch(
             model,
@@ -390,16 +448,26 @@ def main() -> int:
             f"LR: {scheduler.get_last_lr()[0]:.2e}",
         )
 
+        epoch_seconds = time.perf_counter() - epoch_start
+        learning_rate = scheduler.get_last_lr()[0]
+        gpu_mem_gb = (
+            torch.cuda.max_memory_allocated() / 1e9 if device.type == "cuda" else 0.0
+        )
+
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_metrics["loss"])
         history["val_auroc"].append(val_metrics["auroc"])
         history["val_auprc"].append(val_metrics["auprc"])
+        history["lr"].append(learning_rate)
+        history["epoch_seconds"].append(epoch_seconds)
+        history["gpu_mem_gb"].append(gpu_mem_gb)
 
         (run_dir / "history.json").write_text(json.dumps(history, indent=4) + "\n")
 
         improved = val_metrics["auroc"] > best
         if improved:
             best = val_metrics["auroc"]
+            best_epoch = epoch
             stagnant = 0
         else:
             stagnant += 1
@@ -411,10 +479,22 @@ def main() -> int:
             "optimizer": optimizer.state_dict(),
             "scheduler": scheduler.state_dict(),
             "best": best,
+            "best_epoch": best_epoch,
             "stagnant": stagnant,
             "history": history,
         }
         torch.save(checkpoint, run_dir / "last.pth")
+
+        run_info.update(
+            {
+                "last_epoch": epoch,
+                "elapsed_seconds": round(time.perf_counter() - run_started, 1),
+                "best_auroc": best,
+                "best_epoch": best_epoch,
+                "epochs_completed": len(history["val_auroc"]),
+            }
+        )
+        (run_dir / "run_info.json").write_text(json.dumps(run_info, indent=4) + "\n")
 
         if improved:
             torch.save(raw_state, run_dir / "best.pth")
@@ -436,9 +516,11 @@ def main() -> int:
             log("save", f"New best AUROC {best:.4f} saved to {run_dir}")
 
         if stagnant >= args.patience:
+            early_stopped = True
             log("stop", f"Early stopping triggered at epoch {epoch}. Best AUROC: {best:.4f}")
             break
 
+    test_metrics = None
     if test_loader is not None:
         best_path = run_dir / "best.pth"
         if best_path.is_file():
@@ -452,6 +534,20 @@ def main() -> int:
                 f"Test AUPRC: {test_metrics['auprc']:.4f} | "
                 f"Test Loss: {test_metrics['loss']:.4f}",
             )
+
+    run_info.update(
+        {
+            "status": "finished",
+            "finished_at": datetime.now().isoformat(timespec="seconds"),
+            "duration_seconds": round(time.perf_counter() - run_started, 1),
+            "epochs_completed": len(history["val_auroc"]),
+            "best_auroc": best,
+            "best_epoch": best_epoch,
+            "early_stopped": early_stopped,
+            "test_metrics": test_metrics,
+        }
+    )
+    (run_dir / "run_info.json").write_text(json.dumps(run_info, indent=4) + "\n")
 
     return 0
 
