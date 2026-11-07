@@ -20,6 +20,8 @@ explanations and a FastAPI backend behind a single-screen React workspace.
   frontend composites over the original X-ray.
 - Splits by patient ID so follow-up scans cannot leak between train,
   validation, and test.
+- Evaluates a trained NIH model on external SIIM, RSNA, and pediatric pneumonia
+  datasets with DICOM-aware cleaning.
 - Includes a DenseNet-121 demo checkpoint so a fresh clone can start the API
   without downloading 42 GB of images.
 
@@ -226,6 +228,80 @@ python -m src.plot --run artifacts/<run>
 `src.evaluate` writes `per_class_metrics_<split>.json`. See
 [docs/reproduce.md](docs/reproduce.md) for a step-by-step version.
 
+## External evaluation
+
+Training stays on NIH ChestX-ray14 only. External datasets are used as
+task-specific tests, never as additional 14-class training labels. This keeps
+the label semantics clean and avoids treating a missing label as a negative.
+
+The supported external datasets are:
+
+| Dataset | Label used | Kaggle access |
+|---|---|---|
+| SIIM-ACR Pneumothorax | `Pneumothorax` | Competition: `siim-acr-pneumothorax-segmentation` |
+| RSNA Pneumonia | `Pneumonia` | Competition: `rsna-pneumonia-detection-challenge` |
+| Pediatric pneumonia | `Pneumonia` | Dataset: `paultimothymooney/chest-xray-pneumonia` |
+
+Download with the Kaggle CLI after accepting the competition rules on Kaggle:
+
+```bash
+kaggle competitions download -c siim-acr-pneumothorax-segmentation
+kaggle competitions download -c rsna-pneumonia-detection-challenge
+kaggle datasets download -d paultimothymooney/chest-xray-pneumonia
+```
+
+Expected directory layouts:
+
+```text
+data/external/siim/
+  train-rle.csv
+  dicom-images-train/
+
+data/external/rsna/
+  stage_2_train_labels.csv
+  stage_2_train_images/
+
+data/external/pediatric/
+  test/NORMAL/
+  test/PNEUMONIA/
+```
+
+Run the evaluator:
+
+```bash
+python -m src.evaluate_external \
+  --run artifacts/<run> \
+  --dataset siim \
+  --data-dir data/external/siim \
+  --crop-borders
+
+python -m src.evaluate_external \
+  --run artifacts/<run> \
+  --dataset rsna \
+  --data-dir data/external/rsna \
+  --crop-borders
+
+python -m src.evaluate_external \
+  --run artifacts/<run> \
+  --dataset pediatric \
+  --data-dir data/external/pediatric \
+  --split test
+```
+
+Each command writes `external_<dataset>_<class>.json` inside the run directory
+with AUROC, AUPRC, sensitivity, specificity, precision, counts, and invalid-image
+counts. Use `--limit 20` for a smoke test.
+
+Important caveats:
+
+- **RSNA images overlap NIH ChestX-ray14**, so RSNA is a pneumonia/localization
+  check, not an independent patient cohort.
+- SIIM and the pediatric dataset evaluate only pneumothorax and pneumonia
+  respectively; they do not provide labels for the other 12 NIH classes.
+- The evaluator reads DICOM directly, applies `MONOCHROME1` inversion,
+  rescale/windowing, and optional black-border cropping. Corrupt or blank images
+  are skipped and counted in the JSON output.
+
 ## Project layout
 
 ```text
@@ -241,8 +317,11 @@ src/
   eda.py            dataset figures
   engine.py         training/evaluation loops
   evaluate.py       per-class metrics
+  evaluate_external.py  SIIM/RSNA/pediatric external tests
   explain.py        HiResCAM and normalization
+  external.py       external manifests and dataset loader
   find.py           Youden's J threshold tuning
+  imaging.py        DICOM/PNG/JPEG cleaning
   infer.py          CLI overlay generation
   labels.py         single label list
   model.py          torchvision backbones
@@ -263,7 +342,8 @@ cd frontend && npm run lint && npm run typecheck && npm run build
 ```
 
 The Python tests cover label parsing, patient-disjoint splits, the HiResCAM
-formula, run resolution, API validation, and the bundled checkpoint.
+formula, run resolution, API validation, the bundled checkpoint, DICOM/PNG
+cleaning, and external label manifests.
 
 ## Limits
 
@@ -273,8 +353,9 @@ formula, run resolution, API validation, and the bundled checkpoint.
   thresholds.
 - The historical runs used a single seed and no held-out test set. The current
   code adds a test split, but the committed numbers predate it.
-- No calibration, subgroup/fairness analysis, or external validation is
-  included.
+- No calibration or subgroup/fairness analysis is included. External evaluation
+  scripts are provided, but the committed results do not include external test
+  numbers yet.
 - Heatmaps are qualitative. They have not been validated against radiologist
   bounding boxes or deletion/insertion metrics.
 - A research prototype, not a diagnostic tool.

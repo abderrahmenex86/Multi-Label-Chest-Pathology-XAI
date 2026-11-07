@@ -81,8 +81,10 @@ native bf16 autocast.
 - Low AUPRC for rare classes, especially Hernia.
 - Single-seed historical runs; the ConvNeXt-vs-DenseNet gap is small and may not
   be statistically meaningful.
-- No external validation, calibration, or fairness analysis across sex, age, or
-  view position.
+- No external validation results, calibration, or fairness analysis across sex,
+  age, or view position are bundled yet. The repository includes external
+  evaluation scripts for SIIM pneumothorax, RSNA pneumonia, and pediatric
+  pneumonia, but those numbers must be generated with the datasets present.
 - Heatmaps can reflect dataset artifacts or anatomy that is correlated with a
   label rather than the lesion itself.
 - The public API has no authentication, rate limiting, or clinical privacy

@@ -15,7 +15,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install fastapi httpx numpy opencv-python-headless pandas Pillow pytest python-multipart ruff uvicorn
+          python -m pip install fastapi httpx matplotlib numpy opencv-python-headless pandas pydicom Pillow pytest python-multipart ruff torchmetrics tqdm uvicorn
           python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
       - name: Lint
         run: python -m ruff check src backend tests

@@ -87,7 +87,45 @@ reported on the data used to choose it.
 For an older 80/20 run, `--split test` is empty; use `--split val` and label the
 result as validation.
 
-## 5. API
+## 5. External evaluation
+
+Training stays on NIH. External datasets are task-specific tests, not extra
+14-class training data.
+
+```bash
+# Kaggle CLI; accept competition rules first.
+kaggle competitions download -c siim-acr-pneumothorax-segmentation
+kaggle competitions download -c rsna-pneumonia-detection-challenge
+kaggle datasets download -d paultimothymooney/chest-xray-pneumonia
+
+python -m src.evaluate_external \
+  --run artifacts/<run> \
+  --dataset siim \
+  --data-dir data/external/siim \
+  --crop-borders
+
+python -m src.evaluate_external \
+  --run artifacts/<run> \
+  --dataset rsna \
+  --data-dir data/external/rsna \
+  --crop-borders
+
+python -m src.evaluate_external \
+  --run artifacts/<run> \
+  --dataset pediatric \
+  --data-dir data/external/pediatric \
+  --split test
+```
+
+The SIIM and RSNA directories must contain `train-rle.csv` /
+`dicom-images-train` and `stage_2_train_labels.csv` /
+`stage_2_train_images`, respectively. Pediatric expects `test/NORMAL` and
+`test/PNEUMONIA`.
+
+RSNA images overlap NIH ChestX-ray14; treat it as a pneumonia/localization
+check rather than an independent cohort.
+
+## 6. API
 
 ```bash
 python -m backend.main --run checkpoints/densenet121 --host 127.0.0.1 --port 8000
@@ -97,7 +135,7 @@ Without `--run`, the service uses the newest complete directory in `artifacts/`
 and falls back to `checkpoints/densenet121`. `/health` reports whether a model
 loaded.
 
-## 6. Frontend
+## 7. Frontend
 
 ```bash
 cd frontend
@@ -106,7 +144,7 @@ npm install
 npm run dev
 ```
 
-## 7. Tests
+## 8. Tests
 
 ```bash
 pip install -r requirements-dev.txt

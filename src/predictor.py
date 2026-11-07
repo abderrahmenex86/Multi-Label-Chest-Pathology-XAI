@@ -83,6 +83,13 @@ class ChestPredictor:
         if self.device.type == "cuda":
             torch.cuda.synchronize(self.device)
 
+    @torch.no_grad()
+    def predict_tensor(self, inputs: torch.Tensor) -> torch.Tensor:
+        """Return sigmoid probabilities for a batch, without computing a CAM."""
+        with self._lock:
+            logits = self.model(inputs.to(self.device, non_blocking=True))
+            return torch.sigmoid(logits).detach().float().cpu()
+
     def predict(self, image: Image.Image, target: str | None = None) -> dict[str, Any]:
         """Return sorted probabilities, the selected target, and an RGBA heatmap."""
         with self._lock:
