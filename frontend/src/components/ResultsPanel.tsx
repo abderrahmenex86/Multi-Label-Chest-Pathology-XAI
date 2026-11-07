@@ -19,68 +19,70 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     onSelectTarget,
     disabled,
 }) => {
-    const filtered = predictions.filter(
+    const positiveCount = predictions.filter(
         (item) => item.probability >= item.threshold
-    );
+    ).length;
 
     return (
         <div className='flex-1 min-h-0 flex flex-col gap-3 p-4 bg-slate-dark rounded-xl border border-steel-blue/40'>
             <div className='flex items-center justify-between pb-2 border-b border-steel-blue/30 shrink-0'>
-                <h3 className='font-heading font-semibold text-xs text-pure-white uppercase tracking-wider'>
+                <h2 className='font-heading font-semibold text-xs text-pure-white uppercase tracking-wider'>
                     Pathology Findings
-                </h3>
+                </h2>
                 <span className='text-xs font-mono text-silver-gray'>
-                    {filtered.length} detected
+                    {positiveCount} above threshold
                 </span>
             </div>
 
-            <div className='flex-1 overflow-y-auto pr-1 flex flex-col gap-2 min-h-0'>
+            <div
+                className='flex-1 overflow-y-auto pr-1 flex flex-col gap-2 min-h-0'
+                aria-live='polite'>
                 {predictions.length === 0 && (
-                    <div className='flex flex-col items-center justify-center h-full text-silver-gray/60 gap-2 font-sans py-8'>
-                        <ShieldAlert className='w-8 h-8 text-steel-blue/60' />
+                    <div className='flex flex-col items-center justify-center h-full text-silver-gray/70 gap-2 font-sans py-8'>
+                        <ShieldAlert className='w-8 h-8 text-steel-blue/70' />
                         <p className='text-xs'>No analysis performed yet.</p>
                     </div>
                 )}
 
-                {predictions.length > 0 && filtered.length === 0 && (
-                    <div className='py-8 text-center text-xs font-sans text-silver-gray'>
-                        No active pathologies detected above threshold.
-                    </div>
+                {predictions.length > 0 && positiveCount === 0 && (
+                    <p className='py-2 text-center text-xs font-sans text-silver-gray'>
+                        No findings are above their tuned threshold. You can
+                        still select a finding to inspect its explanation.
+                    </p>
                 )}
 
-                {filtered.map((item) => {
-                    const percentage = (item.probability * 100).toFixed(1);
-                    const isHigh = item.probability > 0.7;
-                    const isMedium =
-                        item.probability >= 0.4 && item.probability <= 0.7;
+                {predictions.map((item) => {
+                    const percentage = Math.min(
+                        100,
+                        Math.max(0, item.probability * 100)
+                    );
                     const isSelected = target === item.name;
+                    const isPositive = item.probability >= item.threshold;
 
-                    const barColor =
-                        isHigh ? 'bg-coral-orange'
-                        : isMedium ? 'bg-amber-500'
-                        : 'bg-steel-blue';
-
-                    const textColor =
-                        isHigh ? 'text-coral-orange'
-                        : isMedium ? 'text-amber-400'
+                    const barColor = isPositive ? 'bg-coral-orange' : 'bg-steel-blue';
+                    const textColor = isPositive
+                        ? 'text-coral-orange'
                         : 'text-silver-gray';
 
                     return (
-                        <div
+                        <button
                             key={item.name}
+                            type='button'
                             onClick={() => onSelectTarget(item.name)}
-                            className={`flex flex-col gap-1.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
-                                isSelected ?
-                                    'bg-steel-blue/20 border-coral-orange'
-                                :   'bg-steel-blue/10 border-steel-blue/30 hover:border-steel-blue/60'
+                            disabled={disabled}
+                            aria-pressed={isSelected}
+                            className={`w-full flex flex-col gap-1.5 p-2.5 rounded-lg border text-left transition-all enabled:cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
+                                isSelected
+                                    ? 'bg-steel-blue/20 border-coral-orange'
+                                    : 'bg-steel-blue/10 border-steel-blue/30 enabled:hover:border-steel-blue/60'
                             }`}>
-                            <div className='flex justify-between items-center text-xs font-sans'>
+                            <div className='flex justify-between items-center gap-2 text-xs font-sans'>
                                 <span className='font-semibold text-pure-white'>
                                     {item.name}
                                 </span>
                                 <span
                                     className={`font-mono font-bold ${textColor}`}>
-                                    {percentage}%
+                                    {percentage.toFixed(1)}%
                                 </span>
                             </div>
                             <div className='w-full bg-steel-blue/30 rounded-full h-1.5 overflow-hidden'>
@@ -89,7 +91,16 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                     style={{ width: `${percentage}%` }}
                                 />
                             </div>
-                        </div>
+                            <div className='flex justify-between items-center text-[10px] font-mono text-silver-gray/80'>
+                                <span>
+                                    threshold{' '}
+                                    {(item.threshold * 100).toFixed(0)}%
+                                </span>
+                                <span>
+                                    {isPositive ? 'detected' : 'below threshold'}
+                                </span>
+                            </div>
+                        </button>
                     );
                 })}
             </div>
@@ -101,7 +112,9 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
 
                 <div className='flex flex-col gap-1'>
                     <div className='flex justify-between items-center text-xs font-sans'>
-                        <label className='text-silver-gray text-xs'>
+                        <label
+                            htmlFor='heatmap-opacity'
+                            className='text-silver-gray text-xs'>
                             Opacity
                         </label>
                         <span className='text-pure-white font-mono font-bold'>
@@ -109,6 +122,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                         </span>
                     </div>
                     <input
+                        id='heatmap-opacity'
                         type='range'
                         min='0'
                         max='1'

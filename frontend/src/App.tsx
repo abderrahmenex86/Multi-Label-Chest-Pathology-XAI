@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ImageCanvas } from './components/ImageCanvas';
 import { ResultsPanel } from './components/ResultsPanel';
 import { ActionIsland } from './components/ActionIsland';
-import type { Prediction, AnalysisPayload } from './types';
+import { analyzeImage, errorMessage } from './api';
+import type { Prediction } from './types';
 
 export const App: React.FC = () => {
     const [file, setFile] = useState<File | null>(null);
@@ -12,94 +13,154 @@ export const App: React.FC = () => {
     const [opacity, setOpacity] = useState<number>(0.5);
     const [target, setTarget] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const previewRef = useRef<string | null>(null);
+    const requestRef = useRef<AbortController | null>(null);
+
+    const revokePreview = useCallback(() => {
+        if (previewRef.current) {
+            URL.revokeObjectURL(previewRef.current);
+            previewRef.current = null;
+        }
+    }, []);
 
     const handleFileSelect = (selectedFile: File) => {
+        requestRef.current?.abort();
+        requestRef.current = null;
+
+        revokePreview();
+        const nextPreview = URL.createObjectURL(selectedFile);
+        previewRef.current = nextPreview;
+
         setFile(selectedFile);
-        setPreview(URL.createObjectURL(selectedFile));
+        setPreview(nextPreview);
         setHeatmap(null);
         setPredictions([]);
         setTarget('');
+        setError(null);
+        setLoading(false);
     };
 
-    const analyze = async (selectedTarget?: string) => {
-        if (!file) return;
-        setLoading(true);
+    const analyze = useCallback(
+        async (selectedTarget?: string) => {
+            if (!file) {
+                return;
+            }
 
-        const formData = new FormData();
-        formData.append('file', file);
-        if (selectedTarget) {
-            formData.append('target', selectedTarget);
-        }
+            requestRef.current?.abort();
+            const controller = new AbortController();
+            requestRef.current = controller;
 
-        const host = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+            setLoading(true);
+            setError(null);
 
-        try {
-            const response = await fetch(`${host}/api/v1/predict`, {
-                method: 'POST',
-                body: formData,
-            });
+            try {
+                const payload = await analyzeImage({
+                    file,
+                    target: selectedTarget,
+                    signal: controller.signal,
+                });
 
-            const data: AnalysisPayload = await response.json();
-            setPredictions(data.predictions);
-            setHeatmap(`data:image/png;base64,${data.heatmap}`);
-        } catch (error) {
-            console.error('Analysis request failed', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+                if (requestRef.current !== controller) {
+                    return;
+                }
+
+                setPredictions(payload.predictions);
+                setHeatmap(`data:image/png;base64,${payload.heatmap}`);
+                setTarget(payload.target);
+            } catch (caught) {
+                if (caught instanceof DOMException && caught.name === 'AbortError') {
+                    return;
+                }
+                if (requestRef.current === controller) {
+                    setError(errorMessage(caught));
+                }
+            } finally {
+                if (requestRef.current === controller) {
+                    setLoading(false);
+                }
+            }
+        },
+        [file]
+    );
 
     const handleTargetChange = (newTarget: string) => {
-        setTarget(newTarget);
-        if (file && predictions.length > 0) {
-            analyze(newTarget);
+        if (!file || loading) {
+            return;
         }
+        setTarget(newTarget);
+        void analyze(newTarget);
     };
 
+    useEffect(() => {
+        return () => {
+            requestRef.current?.abort();
+            if (previewRef.current) {
+                URL.revokeObjectURL(previewRef.current);
+            }
+        };
+    }, []);
+
     return (
-        <div className='h-screen max-h-screen overflow-hidden flex flex-col bg-slate-dark text-pure-white font-sans p-4 gap-3'>
-            <header className='flex flex-row justify-between items-center pb-2 border-b border-steel-blue/30 shrink-0'>
+        <div className='min-h-dvh lg:h-dvh lg:max-h-dvh lg:overflow-hidden flex flex-col bg-slate-dark text-pure-white font-sans p-4 gap-3'>
+            <header className='flex flex-row justify-between items-center pb-2 border-b border-steel-blue/30 shrink-0 gap-4'>
                 <div>
                     <h1 className='font-heading text-lg font-bold text-pure-white'>
                         Chest Pathology Visualizer
                     </h1>
                     <p className='text-xs text-silver-gray'>
-                        Deep Learning & HiResCAM Explainability Diagnostic
+                        Deep Learning &amp; HiResCAM Explainability Research
                         Workspace
                     </p>
                 </div>
+                <span className='hidden sm:inline-flex shrink-0 items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-heading font-semibold uppercase tracking-wider text-amber-300'>
+                    Research use only
+                </span>
             </header>
 
-            <div className='flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0 overflow-hidden'>
-                <div className='lg:col-span-9 flex flex-col min-h-0 h-full'>
+            {error && (
+                <div
+                    role='alert'
+                    className='shrink-0 rounded-lg border border-red-800/60 bg-red-950/60 px-3 py-2 text-xs text-red-100'>
+                    {error}
+                </div>
+            )}
+
+            <div className='flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 lg:min-h-0'>
+                <div className='lg:col-span-9 flex flex-col min-h-[50vh] lg:min-h-0'>
                     <ImageCanvas
                         preview={preview}
                         heatmap={heatmap}
                         opacity={opacity}
+                        target={target}
                     />
                 </div>
 
-                <div className='lg:col-span-3 flex flex-col gap-3 min-h-0 h-full'>
+                <div className='lg:col-span-3 flex flex-col gap-3 lg:min-h-0'>
                     <ResultsPanel
                         predictions={predictions}
                         opacity={opacity}
                         setOpacity={setOpacity}
                         target={target}
                         onSelectTarget={handleTargetChange}
-                        disabled={loading || !heatmap}
+                        disabled={loading}
                     />
 
                     <ActionIsland
                         onFileSelect={handleFileSelect}
                         selectedFile={file}
-                        onSubmit={() => analyze(target)}
+                        onSubmit={() => void analyze(target || undefined)}
                         loading={loading}
                     />
                 </div>
             </div>
 
-            <footer className='pt-2 border-t border-steel-blue/30 flex items-center justify-between text-xs font-sans text-silver-gray shrink-0'>
-                <span>made with love, by humans.</span>
+            <footer className='pt-2 border-t border-steel-blue/30 flex flex-wrap gap-2 items-center justify-between text-xs font-sans text-silver-gray shrink-0'>
+                <span>
+                    Research prototype. Not a medical device and not for clinical
+                    use.
+                </span>
                 <a
                     href='https://github.com/abderrahmenex86'
                     target='_blank'

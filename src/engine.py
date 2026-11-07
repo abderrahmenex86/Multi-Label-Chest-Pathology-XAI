@@ -1,9 +1,16 @@
+"""Training and evaluation loops."""
+
+from __future__ import annotations
+
 import torch
 from torchmetrics.classification import MultilabelAUROC, MultilabelAveragePrecision
 from tqdm import tqdm
 
+from .utils import autocast_context
 
-def train_epoch(model, loader, optimizer, criterion, device, clip):
+
+def train_epoch(model, loader, optimizer, criterion, device, clip: float) -> float:
+    """Run one training epoch and return the mean batch loss."""
     model.train()
     total = 0.0
 
@@ -15,7 +22,7 @@ def train_epoch(model, loader, optimizer, criterion, device, clip):
 
         optimizer.zero_grad(set_to_none=True)
 
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        with autocast_context(device):
             outputs = model(inputs)
             loss = criterion(outputs, targets)
 
@@ -27,10 +34,14 @@ def train_epoch(model, loader, optimizer, criterion, device, clip):
         if len(loader) > 1:
             progress.set_postfix({"loss": f"{loss.item():.4f}"})
 
-    return total / len(loader)
+    return total / max(len(loader), 1)
 
 
-def evaluate(model, loader, criterion, device, classes):
+def evaluate(model, loader, criterion, device, classes: int) -> dict[str, float]:
+    """Compute macro AUROC/AUPRC and mean loss on a loader."""
+    if len(loader) == 0:
+        raise ValueError("Cannot evaluate an empty data loader.")
+
     model.eval()
     total = 0.0
 
@@ -44,7 +55,7 @@ def evaluate(model, loader, criterion, device, classes):
             inputs = inputs.to(device, non_blocking=True)
             targets = targets.to(device, non_blocking=True)
 
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            with autocast_context(device):
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
 
@@ -52,7 +63,11 @@ def evaluate(model, loader, criterion, device, classes):
             auroc.update(outputs, targets.long())
             auprc.update(outputs, targets.long())
 
-    results = {"loss": total / len(loader), "auroc": auroc.compute().item(), "auprc": auprc.compute().item()}
+    results = {
+        "loss": total / max(len(loader), 1),
+        "auroc": float(auroc.compute().item()),
+        "auprc": float(auprc.compute().item()),
+    }
 
     auroc.reset()
     auprc.reset()

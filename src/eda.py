@@ -1,50 +1,38 @@
+"""Exploratory data analysis for NIH ChestX-ray14."""
+
+from __future__ import annotations
+
 import argparse
 import os
-import pandas
-import numpy
+import sys
+
 import matplotlib.pyplot as plt
+import numpy
+import pandas
 import seaborn
 
-from utils import log
+from .labels import LABELS, add_label_columns
+from .utils import log
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metadata", default="data/Data_Entry_2017.csv")
     parser.add_argument("--artifacts", default="docs/figs")
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     if not os.path.exists(args.metadata):
         log("error", f"Metadata file missing at {args.metadata}")
-        exit(1)
+        return 1
 
     os.makedirs(args.artifacts, exist_ok=True)
     dataframe = pandas.read_csv(args.metadata)
-
-    columns = [
-        "Atelectasis",
-        "Cardiomegaly",
-        "Effusion",
-        "Infiltration",
-        "Mass",
-        "Nodule",
-        "Pneumonia",
-        "Pneumothorax",
-        "Consolidation",
-        "Edema",
-        "Emphysema",
-        "Fibrosis",
-        "Pleural_Thickening",
-        "Hernia",
-    ]
-
-    if "Finding Labels" in dataframe.columns:
-        for col in columns:
-            if col not in dataframe.columns:
-                target = col.replace("_", " ")
-                dataframe[col] = (
-                    dataframe["Finding Labels"].str.contains(col, regex=False)
-                    | dataframe["Finding Labels"].str.contains(target, regex=False)
-                ).astype(float)
+    dataframe = add_label_columns(dataframe)
+    columns = list(LABELS)
 
     counts = dataframe[columns].sum().sort_values(ascending=False)
 
@@ -57,10 +45,10 @@ if __name__ == "__main__":
     axes.set_xlabel("Pathology Class", fontsize=12)
     plt.xticks(rotation=45, ha="right")
 
-    for p in bars.patches:
+    for patch in bars.patches:
         axes.annotate(
-            f"{int(p.get_height()):,}",
-            (p.get_x() + p.get_width() / 2.0, p.get_height()),
+            f"{int(patch.get_height()):,}",
+            (patch.get_x() + patch.get_width() / 2.0, patch.get_height()),
             ha="center",
             va="center",
             xytext=(0, 5),
@@ -69,18 +57,25 @@ if __name__ == "__main__":
         )
 
     plt.tight_layout()
-    plt.savefig(os.path.join(args.artifacts, "eda_class_distribution.png"))
-    plt.close()
+    plt.savefig(os.path.join(args.artifacts, "eda_class_distribution.png"), bbox_inches="tight")
+    plt.close(figure)
 
     matrix = numpy.zeros((len(columns), len(columns)), dtype=int)
-    for i, col_a in enumerate(columns):
-        for j, col_b in enumerate(columns):
-            if i == j:
-                target_str = col_a.replace("_", " ")
-                solitary = (dataframe["Finding Labels"] == col_a) | (dataframe["Finding Labels"] == target_str)
-                matrix[i, j] = solitary.sum()
+    for row_index, column_a in enumerate(columns):
+        for column_index, column_b in enumerate(columns):
+            if row_index == column_index:
+                if "Finding Labels" in dataframe.columns:
+                    spaced = column_a.replace("_", " ")
+                    solitary = (dataframe["Finding Labels"] == column_a) | (
+                        dataframe["Finding Labels"] == spaced
+                    )
+                    matrix[row_index, column_index] = solitary.sum()
+                else:
+                    matrix[row_index, column_index] = dataframe[column_a].sum()
             else:
-                matrix[i, j] = ((dataframe[col_a] == 1.0) & (dataframe[col_b] == 1.0)).sum()
+                matrix[row_index, column_index] = (
+                    (dataframe[column_a] == 1.0) & (dataframe[column_b] == 1.0)
+                ).sum()
 
     figure, axes = plt.subplots(figsize=(12, 10), dpi=300)
     seaborn.heatmap(
@@ -94,13 +89,15 @@ if __name__ == "__main__":
         cbar_kws={"label": "Co-occurrence Count"},
     )
     axes.set_title(
-        "Pathology Co-Occurrence Matrix\n(Diagonal = Diagnosed Solitary/Alone)", fontsize=13, fontweight="bold"
+        "Pathology Co-Occurrence Matrix\n(Diagonal = Diagnosed Solitary/Alone)",
+        fontsize=13,
+        fontweight="bold",
     )
     plt.xticks(rotation=45, ha="right")
     plt.yticks(rotation=0)
     plt.tight_layout()
-    plt.savefig(os.path.join(args.artifacts, "eda_co_occurrence_heatmap.png"))
-    plt.close()
+    plt.savefig(os.path.join(args.artifacts, "eda_co_occurrence_heatmap.png"), bbox_inches="tight")
+    plt.close(figure)
 
     figure, axes = plt.subplots(1, 3, figsize=(18, 5), dpi=300)
 
@@ -129,12 +126,23 @@ if __name__ == "__main__":
 
     if "View Position" in dataframe.columns:
         view_counts = dataframe["View Position"].value_counts()
-        view_counts.plot(kind="pie", ax=axes[2], autopct="%1.1f%%", colors=["#0052cc", "#ffc300"], startangle=90)
+        view_counts.plot(
+            kind="pie",
+            ax=axes[2],
+            autopct="%1.1f%%",
+            colors=["#0052cc", "#ffc300"],
+            startangle=90,
+        )
         axes[2].set_title("Scan View Position (PA vs AP)", fontsize=12, fontweight="bold")
         axes[2].set_ylabel("")
 
     plt.tight_layout()
-    plt.savefig(os.path.join(args.artifacts, "eda_demographics_and_views.png"))
-    plt.close()
+    plt.savefig(os.path.join(args.artifacts, "eda_demographics_and_views.png"), bbox_inches="tight")
+    plt.close(figure)
 
     log("eda", f"EDA figures saved successfully to {args.artifacts}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

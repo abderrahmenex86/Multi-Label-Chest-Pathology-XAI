@@ -1,29 +1,28 @@
-plot.py
-compare.py
-find.py
-conf_matrices.py
-
-*.sh
 *.ipynb
 temp_*
 *.pyc
+*.pth
+!checkpoints/densenet121/best.pth
 
 temp/
 tmp/
 node_modules/
 __pycache__/
 venv/
+.env
+.env.*
+!.env.example
 
 .idea/
 .vscode/
 
-checkpoints/
+artifacts/
+data/
 dataset/
 logs/
 models/
 results/
 vast/
-artifacts/
 
 .cache/
 hf_cache/
@@ -31,3 +30,6 @@ hf_cache/
 .ipynb_checkpoints/
 .mypy_cache/
 .pytest_cache/
+.coverage
+coverage.xml
+htmlcov/

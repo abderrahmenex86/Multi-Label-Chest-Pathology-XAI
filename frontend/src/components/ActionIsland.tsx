@@ -72,6 +72,7 @@ export const ActionIsland: React.FC<ActionIslandProps> = ({
                     : 'border-silver-gray/40 hover:border-coral-orange/60 bg-steel-blue/10'
                 }`}>
                 <input
+                    id='xray-file-input'
                     type='file'
                     accept='.png,.jpg,.jpeg'
                     onChange={handleFileChange}
@@ -104,15 +105,11 @@ export const ActionIsland: React.FC<ActionIslandProps> = ({
             )}
 
             <div className='grid grid-cols-2 gap-2'>
-                <label className='flex items-center justify-center gap-1.5 px-3 py-2 bg-steel-blue/30 hover:bg-steel-blue/50 text-pure-white font-heading font-semibold text-xs rounded-lg border border-steel-blue/50 cursor-pointer transition-colors'>
+                <label
+                    htmlFor='xray-file-input'
+                    className='flex items-center justify-center gap-1.5 px-3 py-2 bg-steel-blue/30 hover:bg-steel-blue/50 text-pure-white font-heading font-semibold text-xs rounded-lg border border-steel-blue/50 cursor-pointer transition-colors'>
                     <Upload className='w-3.5 h-3.5 text-silver-gray' />
                     <span>Upload</span>
-                    <input
-                        type='file'
-                        accept='.png,.jpg,.jpeg'
-                        onChange={handleFileChange}
-                        className='hidden'
-                    />
                 </label>
 
                 <button

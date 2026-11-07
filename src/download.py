@@ -1,12 +1,28 @@
-import os
+"""Download and flatten the NIH ChestX-ray14 dataset via the Kaggle CLI."""
+
+from __future__ import annotations
+
 import glob
+import os
 import shutil
-import zipfile
 import subprocess
-from utils import log
+import zipfile
+
+from .utils import log
 
 
-def execute_download(metadata, directory):
+def safe_extract(archive: str, directory: str) -> None:
+    """Extract a zip archive while rejecting path-traversal entries."""
+    base = os.path.abspath(directory)
+    with zipfile.ZipFile(archive, "r") as handle:
+        for member in handle.infolist():
+            target = os.path.abspath(os.path.join(directory, member.filename))
+            if os.path.commonpath([base, target]) != base:
+                raise ValueError(f"Archive entry escapes the target directory: {member.filename}")
+        handle.extractall(directory)
+
+
+def execute_download(metadata: str, directory: str) -> None:
     os.makedirs(directory, exist_ok=True)
     os.makedirs(os.path.dirname(metadata) or ".", exist_ok=True)
 
@@ -19,14 +35,27 @@ def execute_download(metadata, directory):
 
     log("download", f"Initiating download for {dataset}")
     try:
-        subprocess.run(["kaggle", "datasets", "download", "-d", dataset, "-p", directory], check=True)
-    except Exception as error:
-        log("error", f"Download failed. Check Kaggle CLI authentication: {error}")
-        raise error
+        subprocess.run(
+            ["kaggle", "datasets", "download", "-d", dataset, "-p", directory],
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        log(
+            "error",
+            "Download failed. Install the Kaggle CLI and configure ~/.kaggle/kaggle.json "
+            f"before using --download. Details: {error}",
+        )
+        raise
+
+    if not os.path.exists(archive):
+        candidates = glob.glob(os.path.join(directory, "*.zip"))
+        if len(candidates) == 1:
+            archive = candidates[0]
+        else:
+            raise FileNotFoundError(f"Expected {archive} after the Kaggle download.")
 
     log("download", "Extracting archive")
-    with zipfile.ZipFile(archive, "r") as handle:
-        handle.extractall(directory)
+    safe_extract(archive, directory)
 
     extracted = os.path.join(directory, "Data_Entry_2017.csv")
     if os.path.exists(extracted):

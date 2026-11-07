@@ -1,169 +1,117 @@
+"""Generate HiResCAM overlay images for validation/test samples."""
+
+from __future__ import annotations
+
 import argparse
-import json
+import base64
 import os
+import sys
+from pathlib import Path
 
 import cv2
-import numpy
-import pandas
-import torch
-import torch.nn.functional as F
-from torchvision import transforms
+import numpy as np
+import pandas as pd
+from PIL import Image
 
-from model import DenseNetMultiLabel
-from utils import log, seed_everything
-
-activations = None
-gradients = None
+from .labels import LABELS, add_label_columns, get_image_column
+from .predictor import ChestPredictor
+from .preprocess import to_rgb
+from .runs import resolve_run
+from .utils import log, seed_everything
 
 
-def save_activation(module, inputs, output):
-    global activations
-    activations = output
-
-
-def save_gradient(module, grad_input, grad_output):
-    global gradients
-    gradients = grad_output[0]
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run", type=str, default=None)
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--run", default=None)
     parser.add_argument("--artifacts", default="artifacts")
     parser.add_argument("--metadata", default="data/Data_Entry_2017.csv")
     parser.add_argument("--directory", default="data/images")
     parser.add_argument("--count", type=int, default=10)
-    parser.add_argument("--target", type=str, default=None)
-    args = parser.parse_args()
+    parser.add_argument("--target", default=None)
+    return parser
+
+
+def decode_heatmap(payload: str) -> np.ndarray:
+    encoded = np.frombuffer(base64.b64decode(payload), dtype=np.uint8)
+    image = cv2.imdecode(encoded, cv2.IMREAD_UNCHANGED)
+    if image is None:
+        raise RuntimeError("Could not decode the heatmap payload.")
+    return image
+
+
+def composite_overlay(bgr: np.ndarray, rgba: np.ndarray) -> np.ndarray:
+    if rgba.ndim != 3 or rgba.shape[2] != 4:
+        raise ValueError("Expected an RGBA heatmap.")
+    alpha = rgba[:, :, 3:4].astype(np.float32) / 255.0
+    return (
+        bgr.astype(np.float32) * (1.0 - alpha)
+        + rgba[:, :, :3].astype(np.float32) * alpha
+    ).astype(np.uint8)
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+
+    if args.target is not None and args.target not in LABELS:
+        raise SystemExit(f"Unknown target '{args.target}'. Choose from: {', '.join(LABELS)}.")
 
     seed_everything(42)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    target_run = args.run
-    if target_run is None:
-        directories = [
-            os.path.join(args.artifacts, item)
-            for item in os.listdir(args.artifacts)
-            if os.path.isdir(os.path.join(args.artifacts, item))
-        ]
-        if not directories:
-            log("error", "No run directories found in artifacts.")
-            exit(1)
-        directories.sort(key=lambda item: os.path.getmtime(item), reverse=True)
-        target_run = directories[0]
+    try:
+        run_dir = resolve_run(args.run, args.artifacts, fallback="checkpoints/densenet121")
+    except FileNotFoundError as error:
+        log("error", str(error))
+        return 1
 
-    config_path = os.path.join(target_run, "hyperparameters.json")
-    weights_path = os.path.join(target_run, "best.pth")
+    predictor = ChestPredictor(run_dir)
 
-    if not os.path.exists(config_path) or not os.path.exists(weights_path):
-        log("error", f"Missing configuration or weights in {target_run}")
-        exit(1)
+    output_dir = Path(run_dir) / "predictions"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(config_path, "r") as handle:
-        hyperparameters = json.load(handle)
+    dataframe = pd.read_csv(args.metadata)
+    dataframe = add_label_columns(dataframe)
 
-    labels = [
-        "Atelectasis",
-        "Cardiomegaly",
-        "Effusion",
-        "Infiltration",
-        "Mass",
-        "Nodule",
-        "Pneumonia",
-        "Pneumothorax",
-        "Consolidation",
-        "Edema",
-        "Emphysema",
-        "Fibrosis",
-        "Pleural_Thickening",
-        "Hernia",
-    ]
+    positive_pool = dataframe[dataframe[list(LABELS)].sum(axis=1) > 0]
+    sample_count = min(args.count, len(positive_pool))
+    samples = positive_pool.sample(n=sample_count, random_state=42)
 
-    model = DenseNetMultiLabel(hyperparameters["classes"], hyperparameters["architecture"]).to(device)
-    model.load_state_dict(torch.load(weights_path, map_location=device), strict=False)
-    model.eval()
+    image_column = get_image_column(dataframe.columns)
+    log("infer", f"Generating {len(samples)} HiResCAM overlays from {run_dir.name}...")
 
-    model.target_layer.register_forward_hook(save_activation)
-    model.target_layer.register_full_backward_hook(save_gradient)
-
-    output_dir = os.path.join(target_run, "predictions")
-    os.makedirs(output_dir, exist_ok=True)
-
-    dataframe = pandas.read_csv(args.metadata)
-    if "Finding Labels" in dataframe.columns:
-        for col in labels:
-            if col not in dataframe.columns:
-                match_label = col.replace("_", " ")
-                dataframe[col] = (
-                    dataframe["Finding Labels"].str.contains(col, regex=False)
-                    | dataframe["Finding Labels"].str.contains(match_label, regex=False)
-                ).astype(float)
-
-    positive_samples = dataframe[dataframe[labels].sum(axis=1) > 0].sample(
-        n=min(args.count, len(dataframe)), random_state=42
-    )
-
-    transform = transforms.Compose(
-        [
-            transforms.ToPILImage(),
-            transforms.Resize((hyperparameters["height"], hyperparameters["width"])),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-
-    log("infer", f"Generating HiResCAM overlays for {len(positive_samples)} sample images...")
-
-    for index, row in positive_samples.iterrows():
-        filename = row["Image Index"] if "Image Index" in row else row["Image_Index"]
-        source = os.path.join(args.directory, filename)
-
+    for _, row in samples.iterrows():
+        source = os.path.join(args.directory, row[image_column])
         if not os.path.exists(source):
+            log("warning", f"Skipping missing image: {source}")
             continue
 
-        raw_bgr = cv2.imread(source, cv2.IMREAD_COLOR)
-        height, width, _ = raw_bgr.shape
-        rgb = cv2.cvtColor(raw_bgr, cv2.COLOR_BGR2RGB)
+        with Image.open(source) as handle:
+            image = to_rgb(handle)
 
-        inputs = transform(rgb).unsqueeze(0).to(device)
+        result = predictor.predict(image, args.target)
+        target_name = result["target"]
+        score = next(
+            item["probability"] for item in result["predictions"] if item["name"] == target_name
+        )
 
-        model.zero_grad()
-        logits = model(inputs)
-        probabilities = torch.sigmoid(logits).squeeze(0)
+        rgb = np.array(image)
+        raw_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        rgba = decode_heatmap(result["heatmap"])
+        overlay = composite_overlay(raw_bgr, rgba)
 
-        if args.target and args.target in labels:
-            target_index = labels.index(args.target)
-        else:
-            target_index = torch.argmax(probabilities).item()
-
-        target_class = labels[target_index]
-        score = probabilities[target_index].item()
-
-        logits[0, target_index].backward()
-
-        rectified_activations = F.relu(activations)
-        hires_cam = torch.sum(F.relu(gradients * rectified_activations), dim=1).squeeze().detach().cpu().numpy()
-
-        max_value = numpy.max(hires_cam)
-        if max_value > 0:
-            hires_cam = hires_cam / max_value
-
-        hires_cam[hires_cam < 0.20] = 0.0
-
-        resized_cam = cv2.resize(hires_cam, (width, height), interpolation=cv2.INTER_LINEAR)
-        scaled_cam = numpy.uint8(255 * resized_cam)
-        colored = cv2.applyColorMap(scaled_cam, cv2.COLORMAP_JET)
-
-        overlay = cv2.addWeighted(raw_bgr, 0.6, colored, 0.4, 0)
-
-        header = numpy.zeros((40, width * 2, 3), dtype=numpy.uint8)
-        text = f"Pred: {target_class} ({score*100:.1f}%) [HiResCAM]"
+        width = raw_bgr.shape[1]
+        header = np.zeros((40, width * 2, 3), dtype=np.uint8)
+        text = f"Pred: {target_name} ({score * 100:.1f}%) [HiResCAM]"
         cv2.putText(header, text, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
-        combined = numpy.hstack((raw_bgr, overlay))
-        final_output = numpy.vstack((header, combined))
+        combined = np.hstack((raw_bgr, overlay))
+        final_output = np.vstack((header, combined))
 
-        output_path = os.path.join(output_dir, f"{os.path.splitext(filename)[0]}_{target_class}.png")
-        cv2.imwrite(output_path, final_output)
+        output_path = output_dir / f"{Path(row[image_column]).stem}_{target_name}.png"
+        cv2.imwrite(str(output_path), final_output)
 
-    log("infer", f"HiResCAM evaluation maps saved to {output_dir}")
+    log("save", f"HiResCAM overlays saved to {output_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

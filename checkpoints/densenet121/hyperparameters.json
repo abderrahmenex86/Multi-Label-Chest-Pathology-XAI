@@ -1,0 +1,20 @@
+{
+    "metadata": "data/Data_Entry_2017.csv",
+    "directory": "data/images",
+    "artifacts": "artifacts",
+    "architecture": "densenet121",
+    "seed": 42,
+    "epochs": 100,
+    "warmup": 2,
+    "patience": 5,
+    "batch": 128,
+    "rate": 0.0001,
+    "decay": 0.1,
+    "clip": 1.0,
+    "classes": 14,
+    "width": 320,
+    "height": 320,
+    "freeze": false,
+    "sanity": false,
+    "download": false
+}
