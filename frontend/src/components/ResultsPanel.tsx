@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldAlert } from 'lucide-react';
+import { ListFilter } from 'lucide-react';
 import type { Prediction } from '../types';
 
 interface ResultsPanelProps {
@@ -24,116 +24,144 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     ).length;
 
     return (
-        <div className='flex-1 min-h-0 flex flex-col gap-3 p-4 bg-slate-dark rounded-xl border border-steel-blue/40'>
-            <div className='flex items-center justify-between pb-2 border-b border-steel-blue/30 shrink-0'>
-                <h2 className='font-heading font-semibold text-xs text-pure-white uppercase tracking-wider'>
-                    Pathology Findings
-                </h2>
-                <span className='text-xs font-mono text-silver-gray'>
+        <section className='flex min-h-0 flex-1 flex-col'>
+            <div className='flex items-end justify-between gap-4 pb-3'>
+                <div>
+                    <h2 className='font-heading text-sm font-semibold text-ink'>
+                        Findings
+                    </h2>
+                    <p className='mt-1 text-xs text-muted'>
+                        Select a finding to update the heatmap.
+                    </p>
+                </div>
+                <span className='shrink-0 pb-0.5 text-[11px] font-medium text-muted'>
                     {positiveCount} above threshold
                 </span>
             </div>
 
             <div
-                className='flex-1 overflow-y-auto pr-1 flex flex-col gap-2 min-h-0'
+                className='min-h-0 flex-1 overflow-y-auto'
                 aria-live='polite'>
                 {predictions.length === 0 && (
-                    <div className='flex flex-col items-center justify-center h-full text-silver-gray/70 gap-2 font-sans py-8'>
-                        <ShieldAlert className='w-8 h-8 text-steel-blue/70' />
-                        <p className='text-xs'>No analysis performed yet.</p>
+                    <div className='flex h-full min-h-[180px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line bg-surface px-6 py-8 text-center'>
+                        <ListFilter className='h-5 w-5 text-muted' strokeWidth={1.6} />
+                        <div>
+                            <p className='font-heading text-sm font-medium text-ink'>
+                                Findings will appear here
+                            </p>
+                            <p className='mt-1 text-xs leading-relaxed text-muted'>
+                                Analyze an X-ray to see all 14 pathology
+                                probabilities.
+                            </p>
+                        </div>
                     </div>
                 )}
 
                 {predictions.length > 0 && positiveCount === 0 && (
-                    <p className='py-2 text-center text-xs font-sans text-silver-gray'>
+                    <p className='mb-2 rounded-lg bg-surface px-3 py-2 text-xs leading-relaxed text-muted'>
                         No findings are above their tuned threshold. You can
-                        still select a finding to inspect its explanation.
+                        still select one to inspect its explanation.
                     </p>
                 )}
 
-                {predictions.map((item) => {
-                    const percentage = Math.min(
-                        100,
-                        Math.max(0, item.probability * 100)
-                    );
-                    const isSelected = target === item.name;
-                    const isPositive = item.probability >= item.threshold;
+                {predictions.length > 0 && (
+                    <div className='divide-y divide-line'>
+                        {predictions.map((item) => {
+                            const percentage = Math.min(
+                                100,
+                                Math.max(0, item.probability * 100)
+                            );
+                            const isSelected = target === item.name;
+                            const isPositive =
+                                item.probability >= item.threshold;
 
-                    const barColor = isPositive ? 'bg-coral-orange' : 'bg-steel-blue';
-                    const textColor = isPositive
-                        ? 'text-coral-orange'
-                        : 'text-silver-gray';
+                            return (
+                                <button
+                                    key={item.name}
+                                    type='button'
+                                    onClick={() => onSelectTarget(item.name)}
+                                    disabled={disabled}
+                                    aria-pressed={isSelected}
+                                    className={`w-full px-2 py-3 text-left transition-colors enabled:cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
+                                        isSelected
+                                            ? 'bg-brand-soft'
+                                            : 'enabled:hover:bg-surface'
+                                    }`}>
+                                    <div className='flex items-center justify-between gap-3'>
+                                        <span className='flex min-w-0 items-center gap-2'>
+                                            <span
+                                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                                    isPositive
+                                                        ? 'bg-brand'
+                                                        : 'bg-line'
+                                                }`}
+                                            />
+                                            <span className='truncate text-sm font-medium text-ink'>
+                                                {item.name}
+                                            </span>
+                                        </span>
+                                        <span
+                                            className={`shrink-0 text-sm font-semibold tabular-nums ${
+                                                isPositive
+                                                    ? 'text-brand'
+                                                    : 'text-muted'
+                                            }`}>
+                                            {percentage.toFixed(1)}%
+                                        </span>
+                                    </div>
 
-                    return (
-                        <button
-                            key={item.name}
-                            type='button'
-                            onClick={() => onSelectTarget(item.name)}
-                            disabled={disabled}
-                            aria-pressed={isSelected}
-                            className={`w-full flex flex-col gap-1.5 p-2.5 rounded-lg border text-left transition-all enabled:cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
-                                isSelected
-                                    ? 'bg-steel-blue/20 border-coral-orange'
-                                    : 'bg-steel-blue/10 border-steel-blue/30 enabled:hover:border-steel-blue/60'
-                            }`}>
-                            <div className='flex justify-between items-center gap-2 text-xs font-sans'>
-                                <span className='font-semibold text-pure-white'>
-                                    {item.name}
-                                </span>
-                                <span
-                                    className={`font-mono font-bold ${textColor}`}>
-                                    {percentage.toFixed(1)}%
-                                </span>
-                            </div>
-                            <div className='w-full bg-steel-blue/30 rounded-full h-1.5 overflow-hidden'>
-                                <div
-                                    className={`h-full rounded-full transition-all duration-300 ${barColor}`}
-                                    style={{ width: `${percentage}%` }}
-                                />
-                            </div>
-                            <div className='flex justify-between items-center text-[10px] font-mono text-silver-gray/80'>
-                                <span>
-                                    threshold{' '}
-                                    {(item.threshold * 100).toFixed(0)}%
-                                </span>
-                                <span>
-                                    {isPositive ? 'detected' : 'below threshold'}
-                                </span>
-                            </div>
-                        </button>
-                    );
-                })}
-            </div>
+                                    <div className='mt-2 h-1 w-full overflow-hidden rounded-full bg-line'>
+                                        <div
+                                            className={`h-full rounded-full transition-all duration-300 ${
+                                                isPositive
+                                                    ? 'bg-brand'
+                                                    : 'bg-muted/30'
+                                            }`}
+                                            style={{ width: `${percentage}%` }}
+                                        />
+                                    </div>
 
-            <div className='pt-3 border-t border-steel-blue/30 flex flex-col gap-2 shrink-0'>
-                <span className='font-heading font-semibold text-xs text-pure-white uppercase tracking-wider'>
-                    Visualization
-                </span>
-
-                <div className='flex flex-col gap-1'>
-                    <div className='flex justify-between items-center text-xs font-sans'>
-                        <label
-                            htmlFor='heatmap-opacity'
-                            className='text-silver-gray text-xs'>
-                            Opacity
-                        </label>
-                        <span className='text-pure-white font-mono font-bold'>
-                            {Math.round(opacity * 100)}%
-                        </span>
+                                    <div className='mt-1.5 flex items-center justify-between gap-3 text-[11px] text-muted'>
+                                        <span>
+                                            {isPositive
+                                                ? 'Detected'
+                                                : 'Below threshold'}
+                                        </span>
+                                        <span>
+                                            Threshold{' '}
+                                            {Math.round(item.threshold * 100)}%
+                                        </span>
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
-                    <input
-                        id='heatmap-opacity'
-                        type='range'
-                        min='0'
-                        max='1'
-                        step='0.02'
-                        value={opacity}
-                        onChange={(e) => setOpacity(parseFloat(e.target.value))}
-                        disabled={disabled}
-                        className='w-full h-1.5 bg-steel-blue/30 rounded-lg appearance-none cursor-pointer accent-coral-orange disabled:opacity-40'
-                    />
-                </div>
+                )}
             </div>
-        </div>
+
+            <div className='mt-4 shrink-0 border-t border-line pt-4'>
+                <div className='flex items-center justify-between gap-4'>
+                    <label
+                        htmlFor='heatmap-opacity'
+                        className='text-xs font-medium text-ink'>
+                        Overlay opacity
+                    </label>
+                    <span className='text-xs font-medium tabular-nums text-muted'>
+                        {Math.round(opacity * 100)}%
+                    </span>
+                </div>
+                <input
+                    id='heatmap-opacity'
+                    type='range'
+                    min='0'
+                    max='1'
+                    step='0.02'
+                    value={opacity}
+                    onChange={(e) => setOpacity(parseFloat(e.target.value))}
+                    disabled={disabled}
+                    className='mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-line accent-brand disabled:opacity-40'
+                />
+            </div>
+        </section>
     );
 };

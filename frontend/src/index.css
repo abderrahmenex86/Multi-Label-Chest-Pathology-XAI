@@ -1,20 +1,44 @@
 @import 'tailwindcss';
 
 @theme {
-    --font-sans: 'Inter', sans-serif;
-    --font-heading: 'Plus Jakarta Sans', sans-serif;
-    --font-mono: 'Geist Mono', monospace;
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+    --font-heading: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Poppins', ui-sans-serif, system-ui, sans-serif;
 
-    --color-slate-dark: #2d3142;
-    --color-silver-gray: #bfc0c0;
-    --color-pure-white: #ffffff;
-    --color-coral-orange: #ef8354;
-    --color-steel-blue: #4f5d75;
+    --color-ink: #17211b;
+    --color-muted: #69766e;
+    --color-line: #e2eae4;
+    --color-surface: #f5f8f5;
+    --color-brand: #167a4b;
+    --color-brand-dark: #0f5f3a;
+    --color-brand-soft: #eaf5ee;
 }
 
 @layer base {
+    html {
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    body {
+        background-color: #ffffff;
+        color: var(--color-ink);
+    }
+
+    ::selection {
+        background-color: #d8efe1;
+        color: var(--color-brand-dark);
+    }
+
     :focus-visible {
-        outline: 2px solid var(--color-coral-orange);
-        outline-offset: 2px;
+        outline: 2px solid var(--color-brand);
+        outline-offset: 3px;
+    }
+}
+
+@layer utilities {
+    .scan-grid {
+        background-image: radial-gradient(circle at 1px 1px, #dce8e0 1px, transparent 0);
+        background-size: 22px 22px;
     }
 }
