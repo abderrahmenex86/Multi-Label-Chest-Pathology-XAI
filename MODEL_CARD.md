@@ -86,7 +86,6 @@ exists.
 ## Ethical and legal notes
 
 - NIH ChestX-ray14 has its own usage terms; cite the dataset paper.
-- No license is currently granted for this repository's code.
 - The backend processes uploads in memory and does not intentionally persist
   them. Add explicit retention and privacy controls before any real deployment.
 

@@ -255,8 +255,3 @@ Python · PyTorch · torchvision · FastAPI · React 19 · Tailwind v4
   X-Rays with Deep Learning," arXiv:1711.05225, 2017.
 - Draelos and Carin, "Use HiResCAM instead of Grad-CAM for faithful
   explanations of convolutional neural networks," arXiv:2011.08891, 2020.
-
-## License
-
-No license is currently granted for this code. The NIH ChestX-ray14 dataset has
-its own usage terms; cite the dataset paper and follow those terms.
