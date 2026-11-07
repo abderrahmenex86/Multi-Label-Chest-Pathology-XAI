@@ -60,6 +60,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sanity-steps", type=int, default=20)
     parser.add_argument("--resume", default=None, help="Path to a last.pth checkpoint.")
     parser.add_argument("--download", action="store_true")
+    parser.add_argument(
+        "--download-only",
+        action="store_true",
+        help="Download and flatten the dataset, then exit.",
+    )
     return parser
 
 
@@ -98,8 +103,11 @@ def main() -> int:
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.download:
+    if args.download or args.download_only:
         execute_download(args.metadata, args.directory)
+
+    if args.download_only:
+        return 0
 
     if not os.path.exists(args.metadata):
         log("error", f"Metadata missing at {args.metadata}. Use --download flag.")

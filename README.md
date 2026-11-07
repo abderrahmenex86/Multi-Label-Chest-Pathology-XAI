@@ -121,12 +121,12 @@ variables. For competition datasets such as RSNA and SIIM, open the competition
 page and accept its rules before downloading.
 
 ```bash
-python -m src.train --download
+python -m src.train --download-only
 ```
 
 That downloads the NIH archives, flattens the image folders into
 `data/images/`, and writes `data/Data_Entry_2017.csv`. Expect roughly 42 GB of
-free disk space.
+free disk space. `--download` also downloads but continues into training.
 
 ### 3. Train
 

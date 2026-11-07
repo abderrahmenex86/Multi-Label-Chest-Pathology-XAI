@@ -19,7 +19,7 @@ from the official selector, then install the remaining requirements.
 
 ```bash
 # Configure ~/.kaggle/kaggle.json first.
-python -m src.train --download
+python -m src.train --download-only
 ```
 
 Expected layout:
