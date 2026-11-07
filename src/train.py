@@ -56,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-pretrained", action="store_true", help="Skip ImageNet weights (offline/smoke tests).")
     parser.add_argument("--freeze", action="store_true")
     parser.add_argument("--cache", action="store_true")
+    parser.add_argument(
+        "--cache-workers",
+        type=int,
+        default=8,
+        help="Threads used to fill the RAM cache.",
+    )
     parser.add_argument("--sanity", action="store_true")
     parser.add_argument("--sanity-steps", type=int, default=20)
     parser.add_argument("--resume", default=None, help="Path to a last.pth checkpoint.")
@@ -99,6 +105,8 @@ def main() -> int:
         raise SystemExit("--sanity-steps must be positive.")
     if args.accumulate < 1:
         raise SystemExit("--accumulate must be at least 1.")
+    if args.cache_workers < 1:
+        raise SystemExit("--cache-workers must be at least 1.")
 
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -140,7 +148,13 @@ def main() -> int:
         return 1
 
     train_dataset = ChestDataset(
-        split.train, args.directory, args.width, args.height, augment=True, cache=args.cache
+        split.train,
+        args.directory,
+        args.width,
+        args.height,
+        augment=True,
+        cache=args.cache,
+        cache_workers=args.cache_workers,
     )
     val_dataset = ChestDataset(
         split.validation, args.directory, args.width, args.height, augment=False, cache=False

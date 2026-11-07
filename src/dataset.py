@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import torch
@@ -19,7 +20,16 @@ cv2.setNumThreads(0)
 class ChestDataset(Dataset):
     """Load chest X-rays and their multi-label targets."""
 
-    def __init__(self, metadata, directory, width, height, augment, cache=False):
+    def __init__(
+        self,
+        metadata,
+        directory,
+        width,
+        height,
+        augment,
+        cache=False,
+        cache_workers=8,
+    ):
         self.directory = directory
         self.width = width
         self.height = height
@@ -49,14 +59,24 @@ class ChestDataset(Dataset):
         self.images = None
         if self.cache:
             self.images = torch.empty((len(self.records), 3, height, width), dtype=torch.uint8)
-            progress = tqdm(
-                enumerate(self.records),
-                total=len(self.records),
-                desc="Caching images to RAM",
-                leave=False,
-            )
-            for index, record in progress:
-                self.images[index] = torch.from_numpy(self._load(record)).permute(2, 0, 1)
+            workers = max(1, min(int(cache_workers), len(self.records)))
+            chunk_size = max(workers * 4, 16)
+
+            def load(item):
+                index, record = item
+                return index, self._load(record)
+
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                with tqdm(
+                    total=len(self.records),
+                    desc=f"Caching images to RAM ({workers} threads)",
+                    leave=False,
+                ) as progress:
+                    for start in range(0, len(self.records), chunk_size):
+                        chunk = list(enumerate(self.records[start : start + chunk_size], start=start))
+                        for index, image in executor.map(load, chunk):
+                            self.images[index] = torch.from_numpy(image).permute(2, 0, 1)
+                            progress.update(1)
 
     def _load(self, record):
         filename = record[self.image_column]

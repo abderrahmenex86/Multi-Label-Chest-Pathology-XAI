@@ -148,7 +148,8 @@ Useful options:
   batch is `batch * accumulate`, which lets a 24 GB card train a larger model.
 - `--cache` loads the training images into RAM. This is roughly 23-26 GB at
   320x320 and 45-50 GB at 448x448 depending on the split; use it only on a
-  machine with enough memory.
+  machine with enough memory. `--cache-workers` controls the parallel fill
+  threads; 8-16 is reasonable on a high-core machine.
 - `--no-compile` disables `torch.compile`.
 - `--no-pretrained` skips the ImageNet download for offline or smoke-test runs.
 
