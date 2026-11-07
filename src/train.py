@@ -18,7 +18,7 @@ from .dataset import ChestDataset
 from .download import execute_download
 from .engine import evaluate, train_epoch
 from .labels import LABELS, NUM_LABELS, add_label_columns, get_image_column
-from .model import ChestMultiLabelModel
+from .model import SUPPORTED_ARCHITECTURES, ChestMultiLabelModel
 from .splits import patient_split
 from .utils import get_git_commit, log, plot_augmentation_steps, seed_everything
 
@@ -28,12 +28,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--metadata", default="data/Data_Entry_2017.csv")
     parser.add_argument("--directory", default="data/images")
     parser.add_argument("--artifacts", default="artifacts")
-    parser.add_argument("--architecture", default="densenet121")
+    parser.add_argument("--architecture", default="densenet121", choices=SUPPORTED_ARCHITECTURES)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--batch", type=int, default=64)
+    parser.add_argument(
+        "--accumulate",
+        type=int,
+        default=1,
+        help="Micro-batches per optimizer step; effective batch is batch * accumulate.",
+    )
     parser.add_argument("--rate", type=float, default=1e-4)
     parser.add_argument("--decay", type=float, default=1e-4)
     parser.add_argument("--clip", type=float, default=1.0)
@@ -86,6 +92,8 @@ def main() -> int:
         raise SystemExit("--warmup must be >= 0 and smaller than --epochs.")
     if args.sanity_steps <= 0:
         raise SystemExit("--sanity-steps must be positive.")
+    if args.accumulate < 1:
+        raise SystemExit("--accumulate must be at least 1.")
 
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -98,6 +106,13 @@ def main() -> int:
         return 1
 
     log("system", f"Executing on {device} using {args.architecture} at {args.width}x{args.height}")
+    log(
+        "system",
+        f"Effective batch: {args.batch * args.accumulate} "
+        f"({args.batch} x {args.accumulate} accumulation steps)",
+    )
+    if device.type == "cuda":
+        log("system", f"bf16 autocast supported: {torch.cuda.is_bf16_supported()}")
 
     dataframe = pd.read_csv(args.metadata)
     dataframe = add_label_columns(dataframe)
@@ -228,7 +243,15 @@ def main() -> int:
         losses: list[float] = []
 
         for step in range(1, args.sanity_steps + 1):
-            loss = train_epoch(model, loader, optimizer, criterion, device, args.clip)
+            loss = train_epoch(
+                model,
+                loader,
+                optimizer,
+                criterion,
+                device,
+                args.clip,
+                args.accumulate,
+            )
             losses.append(loss)
             if step == 1 or step % 5 == 0:
                 log("sanity", f"Step {step} | Loss: {loss:.4f}")
@@ -243,7 +266,7 @@ def main() -> int:
     timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     run_name = (
         f"{timestamp}_{args.architecture}_lr{args.rate}_b{args.batch}"
-        f"_r{args.width}x{args.height}_s{args.seed}"
+        f"_a{args.accumulate}_r{args.width}x{args.height}_s{args.seed}"
     )
     run_dir = Path(args.artifacts) / run_name
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -292,7 +315,15 @@ def main() -> int:
     for epoch in range(start_epoch, args.epochs + 1):
         log("train", f"Starting Epoch {epoch}")
 
-        train_loss = train_epoch(model, train_loader, optimizer, criterion, device, args.clip)
+        train_loss = train_epoch(
+            model,
+            train_loader,
+            optimizer,
+            criterion,
+            device,
+            args.clip,
+            args.accumulate,
+        )
         scheduler.step()
 
         val_metrics = evaluate(model, val_loader, criterion, device, args.classes)

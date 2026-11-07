@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import torch
 from torchvision.models import (
+    ConvNeXt_Base_Weights,
+    ConvNeXt_Large_Weights,
     ConvNeXt_Small_Weights,
+    ConvNeXt_Tiny_Weights,
     DenseNet121_Weights,
     DenseNet161_Weights,
     EfficientNet_B0_Weights,
@@ -12,7 +15,10 @@ from torchvision.models import (
     MobileNet_V3_Small_Weights,
     ResNet18_Weights,
     ResNet50_Weights,
+    convnext_base,
+    convnext_large,
     convnext_small,
+    convnext_tiny,
     densenet121,
     densenet161,
     efficientnet_b0,
@@ -24,10 +30,20 @@ from torchvision.models import (
 
 from .labels import NUM_LABELS
 
+CONVNEXT_VARIANTS = {
+    "convnext_tiny": (convnext_tiny, ConvNeXt_Tiny_Weights.DEFAULT),
+    "convnext_small": (convnext_small, ConvNeXt_Small_Weights.DEFAULT),
+    "convnext_base": (convnext_base, ConvNeXt_Base_Weights.DEFAULT),
+    "convnext_large": (convnext_large, ConvNeXt_Large_Weights.DEFAULT),
+}
+
 SUPPORTED_ARCHITECTURES = (
     "densenet121",
     "densenet161",
+    "convnext_tiny",
     "convnext_small",
+    "convnext_base",
+    "convnext_large",
     "efficientnet_b0",
     "efficientnet_b2",
     "mobilenet_v3_small",
@@ -69,8 +85,9 @@ class ChestMultiLabelModel(torch.nn.Module):
             self.backbone = efficientnet_b2(weights=EfficientNet_B2_Weights.DEFAULT if pretrained else None)
             in_features = self.backbone.classifier[1].in_features
             self.backbone.classifier[1] = torch.nn.Linear(in_features, classes)
-        elif architecture == "convnext_small":
-            self.backbone = convnext_small(weights=ConvNeXt_Small_Weights.DEFAULT if pretrained else None)
+        elif architecture in CONVNEXT_VARIANTS:
+            builder, pretrained_weights = CONVNEXT_VARIANTS[architecture]
+            self.backbone = builder(weights=pretrained_weights if pretrained else None)
             in_features = self.backbone.classifier[2].in_features
             self.backbone.classifier[2] = torch.nn.Linear(in_features, classes)
         elif architecture == "resnet18":

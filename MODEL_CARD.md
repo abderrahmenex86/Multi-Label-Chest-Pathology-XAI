@@ -43,6 +43,11 @@ The bundled DenseNet-121 checkpoint (`checkpoints/densenet121`) comes from the
 historical 80/20 run. New runs default to 70/10/10 so a held-out test split
 exists.
 
+The training pipeline also supports ConvNeXt-Tiny, ConvNeXt-Base, and
+ConvNeXt-Large. On a 24 GB RTX 3090, ConvNeXt-Base at 384x384 with batch 32 and
+two gradient-accumulation steps is the practical larger-model option; it uses
+native bf16 autocast.
+
 ## Preprocessing
 
 - Load RGB, apply EXIF orientation, resize directly to the configured square

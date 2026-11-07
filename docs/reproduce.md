@@ -59,6 +59,19 @@ The split is deterministic from `--seed` and is written to `split.json` inside
 the run directory. New runs save `test_metrics.json` after loading the best
 checkpoint on the held-out test split.
 
+For a larger ConvNeXt-Base run on a 24 GB RTX 3090:
+
+```bash
+python -m src.train \
+  --architecture convnext_base \
+  --width 384 --height 384 \
+  --batch 32 --accumulate 2 \
+  --epochs 8 --patience 3
+```
+
+The effective batch is 64. The 3090 supports bf16 natively; the pipeline falls
+back to fp32 on GPUs without bf16.
+
 ## 4. Thresholds and per-class metrics
 
 ```bash

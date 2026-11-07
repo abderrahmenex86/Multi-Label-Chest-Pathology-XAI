@@ -26,8 +26,12 @@ def seed_everything(seed: int) -> None:
 
 
 def autocast_context(device: torch.device):
-    """Use bf16 autocast on CUDA and a no-op context on CPU."""
-    if device.type == "cuda":
+    """Use bf16 autocast when the GPU supports it, otherwise run in fp32.
+
+    RTX 3090 (Ampere) supports bf16 natively. The fallback keeps the pipeline
+    safe on older CUDA devices where bf16 would be slow or unsupported.
+    """
+    if device.type == "cuda" and torch.cuda.is_bf16_supported():
         return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
     return nullcontext()
 

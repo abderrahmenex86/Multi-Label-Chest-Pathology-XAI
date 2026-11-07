@@ -9,8 +9,8 @@ explanations and a FastAPI backend behind a single-screen React workspace.
 
 ## What it does
 
-- Trains ConvNeXt-Small and DenseNet-121 on 14 pathologies from NIH
-  ChestX-ray14.
+- Trains ConvNeXt-Tiny/Small/Base/Large and DenseNet-121 on 14 pathologies from
+  NIH ChestX-ray14.
 - Produces HiResCAM overlays with
   `ReLU(sum_channels(gradient * activation))`, so the explanation follows the
   published method rather than a per-element ReLU variant.
@@ -51,6 +51,16 @@ historical artifacts did not save them.
 NIH ChestX-ray14: 112,120 frontal radiographs from 30,805 patients. The code
 splits on unique patient IDs, not images. The official image-level split is not
 used because it contains patient overlap.
+
+The dataset was released by the NIH Clinical Center. `src/download.py` uses the
+Kaggle mirror:
+
+- Kaggle: <https://www.kaggle.com/datasets/nih-chest-xrays/data> (the CLI slug
+  used in code is `nih-chest-xrays/data`)
+- Original NIH release: <https://nihcc.app.box.com/v/ChestXray-NIHCC>
+- Paper: Wang et al., "ChestX-ray8: Hospital-scale Chest X-ray Database and
+  Benchmarks on Weakly-Supervised Classification and Localization of Common
+  Thorax Diseases," CVPR 2017.
 
 Class balance, co-occurrence, and view-position demographics are in
 [docs/eda.md](docs/eda.md). Labels are mined from radiology reports and are
@@ -118,6 +128,8 @@ Useful options:
 - `--val-fraction 0.1 --test-fraction 0.1` (default) or
   `--val-fraction 0.2 --test-fraction 0.0` for the historical 80/20 behavior.
 - `--resume artifacts/<run>/last.pth` to continue a run.
+- `--accumulate 2` performs two micro-batches per optimizer step. The effective
+  batch is `batch * accumulate`, which lets a 24 GB card train a larger model.
 - `--cache` loads the training images into RAM. This is roughly 23-26 GB at
   320x320 and 45-50 GB at 448x448 depending on the split; use it only on a
   machine with enough memory.
@@ -127,6 +139,34 @@ Useful options:
 Each run writes `hyperparameters.json`, `split.json`, `architecture.txt`,
 `augmentation.png`, `history.json`, `best.pth`, `last.pth`, and, after training,
 `test_metrics.json` to `artifacts/<run>/`.
+
+### Model size and 3-hour RTX 3090 runs
+
+| Architecture | Parameters | Suggested 3090 setup |
+|---|---:|---|
+| `convnext_tiny` | 28 M | 448x448, batch 64 |
+| `convnext_small` | 50 M | 448x448, batch 64 |
+| `convnext_base` | 89 M | 384x384, batch 32, accumulate 2 |
+| `convnext_large` | 198 M | Not recommended for a 3-hour run |
+
+The RTX 3090 is Ampere, so the pipeline uses native bf16 autocast. If bf16 is
+not available, it falls back to fp32 rather than silently using an unsafe
+precision.
+
+A realistic 3-hour larger-model run:
+
+```bash
+python -m src.train \
+  --architecture convnext_base \
+  --width 384 --height 384 \
+  --batch 32 --accumulate 2 \
+  --epochs 8 --patience 3
+```
+
+That gives an effective batch of 64. Base is roughly 1.8x the compute of Small,
+so expect fewer epochs than the historical 448 Small run. A safer alternative
+is to train `convnext_small` at 384 for ~14 epochs, or train at 320 and resume at
+448 for the last few epochs.
 
 ### 4. Backend
 
