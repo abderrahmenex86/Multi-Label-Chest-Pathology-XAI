@@ -104,7 +104,21 @@ installation selector for a specific CUDA version.
 ### 2. Dataset
 
 The downloader uses the Kaggle CLI. Install it (included in
-`requirements.txt`) and configure `~/.kaggle/kaggle.json` first.
+`requirements.txt`) and authenticate first.
+
+1. Open <https://www.kaggle.com/settings> and choose **Create New Token**.
+2. Move the downloaded `kaggle.json` to `~/.kaggle/kaggle.json`.
+3. Restrict permissions:
+
+```bash
+mkdir -p ~/.kaggle
+mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json
+chmod 600 ~/.kaggle/kaggle.json
+```
+
+Alternatively, set `KAGGLE_USERNAME` and `KAGGLE_KEY` as environment
+variables. For competition datasets such as RSNA and SIIM, open the competition
+page and accept its rules before downloading.
 
 ```bash
 python -m src.train --download
