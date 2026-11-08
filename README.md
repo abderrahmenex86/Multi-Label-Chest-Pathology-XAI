@@ -146,6 +146,11 @@ resolution and batch size._
 
 _Historical 80/20 validation confusion matrices at a fixed 0.50 threshold._
 
+![Historical per-class Youden J thresholds](docs/figs/optimal_thresholds.png)
+
+_Historical per-class thresholds from an earlier run. The current run uses the
+thresholds shown in the 70/10/10 section above._
+
 CheXNet reports 0.841 mean AUROC on the official NIH test list. The numbers here
 come from a random patient split, so that comparison is only a rough reference.
 
