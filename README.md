@@ -1,442 +1,462 @@
 # Multi-Label Chest Pathology XAI
 
-A 14-class chest pathology classifier on NIH ChestX-ray14, with HiResCAM
-explanations and a FastAPI backend behind a single-screen React workspace.
+I built this as a 14-class chest X-ray classifier on NIH ChestX-ray14, with a
+HiResCAM explanation for every prediction and a FastAPI backend behind a React
+workspace called Chest X-Ray Studio. The model is a ConvNeXt-Base trained at
+384×384 on a patient-level 70/10/10 split; the finished run reached **0.8568
+test AUROC / 0.3061 test AUPRC** on 11,195 held-out images. The split is by
+patient ID, the decision thresholds are tuned on validation only, and the
+explanation is the published HiResCAM form, `ReLU(sum(grad * activation))`.
+The repository also includes a DenseNet-121 demo checkpoint, DICOM-aware
+external evaluation, and the training/reporting pipeline used to produce the
+numbers below.
 
-> **Research prototype. Not a medical device. Not for clinical use.**
+[![Silent demo of Chest X-Ray Studio: title card, upload, analysis, heatmap, results card](docs/figs/demo.gif)](docs/figs/demo.mp4)
 
-![Application demo](docs/figs/demo.gif)
+_Silent 16-second demo. The interface is shown with a real held-out test image;
+the final card reports the test metrics. The full-quality MP4 is
+[`docs/figs/demo.mp4`](docs/figs/demo.mp4)._
 
-## What it does
+> **Research prototype.** Not a medical device and not for clinical use.
 
-- Trains ConvNeXt-Tiny/Small/Base/Large and DenseNet-121 on 14 pathologies from
-  NIH ChestX-ray14.
-- Produces HiResCAM overlays with
-  `ReLU(sum_channels(gradient * activation))`, so the explanation follows the
-  published method rather than a per-element ReLU variant.
-- Tunes a decision threshold per disease with Youden's J on the validation
-  split only.
-- Serves inference from memory through FastAPI and returns an RGBA PNG that the
-  frontend composites over the original X-ray.
-- Splits by patient ID so follow-up scans cannot leak between train,
-  validation, and test.
-- Evaluates a trained NIH model on external SIIM, RSNA, and pediatric pneumonia
-  datasets with DICOM-aware cleaning.
-- Includes a DenseNet-121 demo checkpoint so a fresh clone can start the API
-  without downloading 42 GB of images.
+![Chest X-Ray Studio with a held-out test image and HiResCAM overlay](docs/figs/ui_workspace.png)
+
+_The white-and-green workspace after analyzing a held-out test image. The
+finding list contains all 14 predictions; the selected class drives the overlay._
+
+## Contents
+
+- [Results](#results)
+- [Dataset](#dataset)
+- [Training vs held-out test examples](#training-vs-held-out-test-examples)
+- [Requirements](#requirements)
+- [Reproduce](#reproduce)
+- [How it works](#how-it-works)
+- [Configuration](#configuration)
+- [External evaluation](#external-evaluation)
+- [Project layout](#project-layout)
+- [Limits](#limits)
+- [Citation](#citation)
+- [Stack](#stack)
 
 ## Results
 
 ### Current 70/10/10 run
 
-A fresh ConvNeXt-Base run trained on the current **70/10/10 patient split**.
-The test set is held out and was never used for training or threshold tuning.
+The finished ConvNeXt-Base run was trained on the current patient-level split.
+The test set was not used for training or threshold tuning.
 
 | Model | Parameters | Resolution | Best val AUROC | Best val AUPRC | Test AUROC | Test AUPRC | Epochs |
-|---|---|---:|---:|---:|---:|---:|---:|
-| ConvNeXt-Base | 87.6 M | 384x384 | 0.8602 (epoch 7) | 0.2854 (epoch 6) | 0.8568 | 0.3061 | 11, early stop |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ConvNeXt-Base | 87.6 M | 384×384 | 0.8602 (epoch 7) | 0.2854 (epoch 6) | **0.8568** | **0.3061** | 11, early stop |
 
 - 89,704 training images / 11,221 validation / 11,195 held-out test images
 - 24,645 training patients / 3,080 validation / 3,080 test patients
+- Test AUROC and AUPRC are macro averages across the 14 classes
 - Test metrics use per-class thresholds tuned on validation only
-- Test AUPRC is macro-averaged and is higher than the historical validation
-  peak, but the splits are different, so the numbers are not directly
-  comparable
+- Hardware: RTX 3090 24 GB, bf16 autocast, 12 dataloader workers, train/validation RAM cache
+- Training wall time to the epoch-11 stop: about 2 h 27 min
 
-![Training history](docs/figs/convnext_base_training_history.png)
+![Validation loss, AUROC, AUPRC, learning rate and epoch time](docs/figs/convnext_base_training_history.png)
 
-![Run comparison](docs/figs/convnext_base_comparison.png)
+_Training history. The best validation AUROC was epoch 7; epochs 8–11 did not
+improve it._
 
-![Per-class test metrics](docs/figs/convnext_base_per_class.png)
+![Validation AUROC and AUPRC across the historical runs and the current run](docs/figs/convnext_base_comparison.png)
+
+_Current run against the earlier 80/20 experiments. The historical runs used a
+different split and are shown for context, not as a controlled comparison._
+
+![Per-class AUROC and AUPRC on the held-out test split](docs/figs/convnext_base_per_class.png)
+
+_Macro test AUROC is 0.8568 and macro AUPRC is 0.3061. Infiltration and
+Pneumonia remain the weakest classes, which is consistent with the label noise
+and class imbalance in the dataset._
+
+<details>
+<summary>Per-class test metrics</summary>
+
+| Class | AUROC | AUPRC | Threshold |
+|---|---:|---:|---:|
+| Atelectasis | 0.8425 | 0.4089 | 0.41 |
+| Cardiomegaly | 0.9159 | 0.3128 | 0.23 |
+| Effusion | 0.8945 | 0.5538 | 0.46 |
+| Infiltration | 0.7354 | 0.3643 | 0.43 |
+| Mass | 0.8747 | 0.3619 | 0.22 |
+| Nodule | 0.8353 | 0.3016 | 0.28 |
+| Pneumonia | 0.7736 | 0.0591 | 0.05 |
+| Pneumothorax | 0.8911 | 0.3147 | 0.18 |
+| Consolidation | 0.8014 | 0.1641 | 0.36 |
+| Edema | 0.9022 | 0.2090 | 0.15 |
+| Emphysema | 0.9499 | 0.4003 | 0.07 |
+| Fibrosis | 0.8559 | 0.1181 | 0.12 |
+| Pleural_Thickening | 0.8367 | 0.1878 | 0.18 |
+| Hernia | 0.8859 | 0.5299 | 0.08 |
+
+</details>
+
+![Per-class confusion matrices at tuned thresholds on the test split](docs/figs/convnext_base_confusion_matrices_test.png)
+
+_Test confusion matrices use the per-class thresholds above, not a fixed 0.50
+threshold._
+
+![Per-class Youden J thresholds](docs/figs/convnext_base_optimal_thresholds.png)
+
+_Thresholds are selected on the validation split with Youden's J. The low
+Pneumonia threshold reflects its low prevalence and weak separation._
+
+<details>
+<summary>ROC and precision-recall curves</summary>
+
+![One-vs-rest ROC curves for all 14 classes](docs/figs/convnext_base_roc_curves.png)
+
+_One-vs-rest ROC curves on the held-out test split._
+
+![One-vs-rest precision-recall curves for all 14 classes](docs/figs/convnext_base_pr_curves.png)
+
+_One-vs-rest precision-recall curves on the held-out test split. Rare classes
+have low baselines and low AP; the curves are more informative than the macro
+AUPRC alone._
+
+</details>
 
 ### Historical 80/20 runs
 
-The numbers below are **historical artifacts from an 80/20 patient split**.
-They are kept for comparison with the earlier version of the project.
-
 | Model | Parameters | Resolution | Peak val AUROC | Peak val AUPRC |
-|---|---|---:|---:|---:|
-| ConvNeXt-Small | 49.47 M | 448x448 | 0.8583 | 0.2992 |
-| DenseNet-121 | 6.97 M | 320x320 | 0.8488 | 0.2812 |
+|---|---:|---:|---:|---:|
+| ConvNeXt-Small | 49.47 M | 448×448 | 0.8583 | 0.2992 |
+| DenseNet-121 | 6.97 M | 320×320 | 0.8488 | 0.2812 |
 
-Peak AUROC and peak AUPRC are each the maximum over epochs and can come from
-different epochs. The 0.8583 AUROC is epoch 7 of the 448x448 ConvNeXt run; its
-AUPRC at that epoch is 0.2948. The 0.2992 figure is that run's peak AUPRC.
+These are from an earlier 80/20 patient split and are not directly comparable
+to the current test results. The 0.8583 AUROC is epoch 7 of the 448×448
+ConvNeXt-Small run; its AUPRC at that epoch is 0.2948, and 0.2992 is that run's
+peak AUPRC.
 
-These are **not** numbers on the official NIH test list. CheXNet reports 0.841
-mean AUROC on the official test list, while these numbers come from a random
-patient split, so the comparison is only a rough reference.
+![Historical validation curves](docs/figs/model_comparison_curves.png)
 
-Per-class metrics can be regenerated with `python -m src.evaluate`; the
-historical artifacts did not save them.
+_Validation curves from the saved 80/20 experiments. Several runs are included
+because early stopping and batch-size changes produced different trajectories._
+
+![Historical peak AUROC ranking](docs/figs/model_comparison_bar.png)
+
+_Peak validation AUROC by run. The comparison is descriptive; the runs differ in
+resolution and batch size._
+
+![Historical confusion matrices](docs/figs/confusion_matrices.png)
+
+_Historical 80/20 validation confusion matrices at a fixed 0.50 threshold._
+
+CheXNet reports 0.841 mean AUROC on the official NIH test list. The numbers here
+come from a random patient split, so that comparison is only a rough reference.
 
 ## Dataset
 
-NIH ChestX-ray14: 112,120 frontal radiographs from 30,805 patients. The code
-splits on unique patient IDs, not images. The official image-level split is not
-used because it contains patient overlap.
+The dataset is **NIH ChestX-ray14**, released by the NIH Clinical Center:
+112,120 frontal radiographs from 30,805 patients. It has 14 text-mined labels:
+Atelectasis, Cardiomegaly, Effusion, Infiltration, Mass, Nodule, Pneumonia,
+Pneumothorax, Consolidation, Edema, Emphysema, Fibrosis, Pleural Thickening,
+and Hernia. The labels come from radiology reports, so they are noisy.
 
-The dataset was released by the NIH Clinical Center. `src/download.py` uses the
-Kaggle mirror:
+I use a patient-level 70/10/10 split. The official image-level split is not used
+because it contains patient overlap. The split and the per-class counts are
+written into every run as `split.json` and `split_stats.json`.
 
-- Kaggle: <https://www.kaggle.com/datasets/nih-chest-xrays/data> (the CLI slug
-  used in code is `nih-chest-xrays/data`)
+- Kaggle mirror used by the code:
+  <https://www.kaggle.com/datasets/nih-chest-xrays/data>
+  (CLI slug `nih-chest-xrays/data`)
 - Original NIH release: <https://nihcc.app.box.com/v/ChestXray-NIHCC>
 - Paper: Wang et al., "ChestX-ray8: Hospital-scale Chest X-ray Database and
   Benchmarks on Weakly-Supervised Classification and Localization of Common
   Thorax Diseases," CVPR 2017.
 
-Class balance, co-occurrence, and view-position demographics are in
-[docs/eda.md](docs/eda.md). Labels are mined from radiology reports and are
-noisy.
+```bash
+python -m src.train --download-only
+```
 
-## Explanations
+The downloader expects the Kaggle CLI and `~/.kaggle/kaggle.json`; it downloads,
+extracts, and flattens the archives into `data/images/`. Expect about 42 GB of
+free disk space.
 
-![Confusion matrices](docs/figs/confusion_matrices.png)
+![Class distribution](docs/figs/eda_class_distribution.png)
 
-The committed confusion-matrix figure was generated at a fixed 0.50 threshold
-on the historical validation split. The API uses tuned thresholds when a run
-contains `optimal_thresholds.json`.
+_Label frequency across the full dataset. The dataset is multi-label, so the
+counts do not sum to 112,120._
 
-| Finding | Overlay |
-|---|---|
-| Effusion (model score 84.1%) | ![Effusion](docs/figs/00012841_000_Effusion.png) |
-| Infiltration (model score 63.2%) | ![Infiltration](docs/figs/00000181_011_Infiltration.png) |
+![Co-occurrence matrix](docs/figs/eda_co_occurrence_heatmap.png)
 
-The heatmap is generated for one selected class at a time. The UI lists all 14
-predictions, marks which ones are above their threshold, and lets you select a
-below-threshold finding to inspect its explanation.
+_Co-occurrence counts. The diagonal isolates diagnoses recorded alone._
+
+![Demographics and view positions](docs/figs/eda_demographics_and_views.png)
+
+_Scans per patient, age and gender distribution, and PA/AP view mix. The model
+does not use any of this metadata as input; these plots describe the dataset,
+not model behavior._
 
 ## Training vs held-out test examples
 
-Each pair shows the original radiograph on the left and the HiResCAM overlay on
-the right. Training examples were seen during training; test examples come from
-patients in the held-out test split.
+Each image below is a side-by-side pair: the original radiograph on the left and
+the HiResCAM overlay on the right. Training examples were seen during training;
+the held-out examples come from patients in the test split.
 
 ### Training split
 
 | Effusion (91.4%) | Mass (93.9%) |
 |---|---|
-| ![Training Effusion](docs/figs/sample_train_effusion.png) | ![Training Mass](docs/figs/sample_train_mass.png) |
+| ![Training example, effusion](docs/figs/sample_train_effusion.png) | ![Training example, mass](docs/figs/sample_train_mass.png) |
 
 ### Held-out test split
 
 | Cardiomegaly (82.5%) | Infiltration (86.8%) |
 |---|---|
-| ![Test Cardiomegaly](docs/figs/sample_test_cardiomegaly.png) | ![Test Infiltration](docs/figs/sample_test_infiltration.png) |
+| ![Test example, cardiomegaly](docs/figs/sample_test_cardiomegaly.png) | ![Test example, infiltration](docs/figs/sample_test_infiltration.png) |
 
-## Run it
+The remaining historical overlays are in `docs/figs/`:
+[Extensive effusion example](docs/figs/00012841_000_Effusion.png),
+[infiltration](docs/figs/00014613_001_Infiltration.png),
+[mass](docs/figs/00009305_001_Mass.png),
+[atelectasis](docs/figs/00011702_006_Atelectasis.png),
+[edema](docs/figs/00012863_008_Edema.png),
+[emphysema](docs/figs/00016064_004_Emphysema.png),
+[infiltration](docs/figs/00000181_011_Infiltration.png),
+[effusion A](docs/figs/00001684_023_Effusion.png),
+[effusion B](docs/figs/00012834_008_Effusion.png),
+and [effusion C](docs/figs/00020703_027_Effusion.png).
 
-### 1. Python environment
+## Requirements
 
-```bash
-git clone https://github.com/abderrahmenex86/Multi-Label-Chest-Pathology-XAI
-cd Multi-Label-Chest-Pathology-XAI
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+- Python 3.10 or newer. The code uses `X | Y` annotations and modern
+  `from __future__` syntax.
+- PyTorch 2.3 or newer and torchvision 0.18 or newer. The finished run used
+  torch 2.14.1 + CUDA 13.2.
+- Node 22.12 or newer for Vite 8 and the React workspace.
+- An RTX 3090 24 GB for the training configuration below. CPU inference works;
+  it is slower but uses the same code path.
+- About 42 GB of disk for the dataset and its extracted images, plus about
+  1.2 GB per ConvNeXt-Base run directory.
+- The Kaggle CLI for the dataset. `pydicom` is used by the external evaluator.
 
-Use a CUDA build of PyTorch if you plan to train. The minimum versions in
-`requirements.txt` install the default wheel for your platform; see the PyTorch
-installation selector for a specific CUDA version.
+## Reproduce
 
-### 2. Dataset
+### Weights
 
-The downloader uses the Kaggle CLI. Install it (included in
-`requirements.txt`) and authenticate first.
-
-1. Open <https://www.kaggle.com/settings> and choose **Create New Token**.
-2. Move the downloaded `kaggle.json` to `~/.kaggle/kaggle.json`.
-3. Restrict permissions:
-
-```bash
-mkdir -p ~/.kaggle
-mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json
-chmod 600 ~/.kaggle/kaggle.json
-```
-
-Alternatively, set `KAGGLE_USERNAME` and `KAGGLE_KEY` as environment
-variables. For competition datasets such as RSNA and SIIM, open the competition
-page and accept its rules before downloading.
-
-```bash
-python -m src.train --download-only
-```
-
-That downloads the NIH archives, flattens the image folders into
-`data/images/`, and writes `data/Data_Entry_2017.csv`. Expect roughly 42 GB of
-free disk space. `--download` also downloads but continues into training.
-
-### 3. Train
+The repository includes a DenseNet-121 demo checkpoint at
+`checkpoints/densenet121/`. The finished ConvNeXt-Base checkpoint is
+`artifacts/2026_11_07_21_17_41_convnext_base_lr0.0001_b32_a2_r384x384_s42/best.pth`
+and is not committed because `artifacts/` is ignored.
 
 ```bash
-# Fast check: 20 steps on one batch, then exit.
-python -m src.train --sanity --sanity-steps 20
-
-# Full run. The current default split is 70/10/10 by patient.
-python -m src.train --architecture convnext_small --batch 64 --epochs 50 \
-  --width 448 --height 448
+python -m backend.main \
+  --run artifacts/2026_11_07_21_17_41_convnext_base_lr0.0001_b32_a2_r384x384_s42 \
+  --host 127.0.0.1 --port 8000
 ```
 
-Useful options:
+The model loader reads the architecture and input resolution from
+`hyperparameters.json` and does not download ImageNet weights at inference time.
 
-- `--val-fraction 0.1 --test-fraction 0.1` (default) or
-  `--val-fraction 0.2 --test-fraction 0.0` for the historical 80/20 behavior.
-- `--resume artifacts/<run>/last.pth` to continue a run.
-- `--accumulate 2` performs two micro-batches per optimizer step. The effective
-  batch is `batch * accumulate`, which lets a 24 GB card train a larger model.
-- `--cache` loads the training images into RAM. This is roughly 23-26 GB at
-  320x320 and 45-50 GB at 448x448 depending on the split; use it only on a
-  machine with enough memory. `--cache-workers` controls the parallel fill
-  threads; 8-16 is reasonable on a high-core machine.
-- `--cache-val` also caches the validation split. It is only ~3.5 GB at 320,
-  ~5 GB at 384, and ~6.8 GB at 448, so it is cheap on a large-RAM machine.
-- `--val-batch 64` uses a larger forward-only batch for validation and test.
-  This is usually safe because validation does not store gradients.
-- `--no-compile` disables `torch.compile`.
-- `--no-pretrained` skips the ImageNet download for offline or smoke-test runs.
-
-Each run writes `hyperparameters.json`, `split.json`, `architecture.txt`,
-`augmentation.png`, `history.json`, `best.pth`, `last.pth`, and, after training,
-`test_metrics.json` to `artifacts/<run>/`.
-
-### Model size and 3-hour RTX 3090 runs
-
-| Architecture | Parameters | Suggested 3090 setup |
-|---|---:|---|
-| `convnext_tiny` | 28 M | 448x448, batch 64 |
-| `convnext_small` | 50 M | 448x448, batch 64 |
-| `convnext_base` | 89 M | 384x384, batch 32, accumulate 2 |
-| `convnext_large` | 198 M | Not recommended for a 3-hour run |
-
-The RTX 3090 is Ampere, so the pipeline uses native bf16 autocast. If bf16 is
-not available, it falls back to fp32 rather than silently using an unsafe
-precision.
-
-A realistic 3-hour larger-model run:
+### Train
 
 ```bash
 python -m src.train \
   --architecture convnext_base \
   --width 384 --height 384 \
   --batch 32 --accumulate 2 \
-  --epochs 8 --patience 3
+  --workers 12 --prefetch 4 \
+  --cache --cache-val --cache-workers 16 \
+  --val-batch 64 \
+  --epochs 16 --patience 4 \
+  --val-fraction 0.1 --test-fraction 0.1
 ```
 
-That gives an effective batch of 64. Base is roughly 1.8x the compute of Small,
-so expect fewer epochs than the historical 448 Small run. A safer alternative
-is to train `convnext_small` at 384 for ~14 epochs, or train at 320 and resume at
-448 for the last few epochs.
+The effective batch is 64. The train cache is about 32 GiB at 384×384; validation
+adds about 5 GiB. The finished run early-stopped after epoch 11. A full 16-epoch
+run took about 3.5 h on the 3090; the 11-epoch run took about 2 h 27 min.
 
-### 4. Backend
+The default parser also supports `--architecture convnext_small`, `convnext_tiny`,
+`convnext_base`, `convnext_large`, `densenet121`, and the other torchvision
+backbones listed in `src/model.py`.
 
-```bash
-python -m backend.main --host 127.0.0.1 --port 8000
-```
-
-The backend picks the newest complete run in `artifacts/`, then falls back to
-the bundled `checkpoints/densenet121`. To force a run:
+### Evaluate
 
 ```bash
-python -m backend.main --run checkpoints/densenet121
-```
-
-Environment variables:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `CHEST_XAI_RUN` | unset | Run directory to serve |
-| `CHEST_XAI_ARTIFACTS` | `artifacts` | Directory containing runs |
-| `CHEST_XAI_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated allowlist |
-| `CHEST_XAI_MAX_UPLOAD_BYTES` | `10485760` | Upload limit in bytes |
-
-The API exposes `GET /health` and `POST /api/v1/predict`. Interactive docs are
-at <http://127.0.0.1:8000/docs>.
-
-### 5. Frontend
-
-```bash
-cd frontend
-cp .env.example .env
-npm install
-npm run dev
-```
-
-Open <http://localhost:5173>. Set `VITE_API_URL` if the backend is not on
-`http://localhost:8000`.
-
-## Reproduce metrics and figures
-
-```bash
-# 1. Tune per-class thresholds on the validation split.
 python -m src.find --run artifacts/<run>
-
-# 2. Per-class AUROC/AUPRC and confusion counts on the test split.
 python -m src.evaluate --run artifacts/<run> --split test
-
-# 3. Confusion-matrix grid using the tuned thresholds.
 python -m src.conf_matrices --run artifacts/<run> --split test
-
-# 4. Comprehensive report: training curves, per-class bars, ROC/PR,
-#    comparison with older runs, summary JSON/Markdown.
 python -m src.report --run artifacts/<run>
-
-# 5. Training-curve and experiment comparison figures.
-python -m src.compare
-python -m src.plot --run artifacts/<run>
 ```
 
-`src.find` writes `optimal_thresholds.json` and `thresholds_meta.json`.
-`src.evaluate` writes `per_class_metrics_<split>.json`. See
-[docs/reproduce.md](docs/reproduce.md) for a step-by-step version.
+`src.evaluate` writes `per_class_metrics_test.json` and
+`predictions_test.npz`; `src.report` uses the saved predictions for ROC/PR
+curves, per-class plots, comparison curves, and the summary files.
 
-## External evaluation
+### External evaluation
 
-Training stays on NIH ChestX-ray14 only. External datasets are used as
-task-specific tests, never as additional 14-class training labels. This keeps
-the label semantics clean and avoids treating a missing label as a negative.
-
-The supported external datasets are:
+Training stays on NIH. External datasets are task-specific tests, never extra
+14-class labels. The external evaluator supports:
 
 | Dataset | Label used | Kaggle access |
 |---|---|---|
-| SIIM-ACR Pneumothorax | `Pneumothorax` | Competition: `siim-acr-pneumothorax-segmentation` |
-| RSNA Pneumonia | `Pneumonia` | Competition: `rsna-pneumonia-detection-challenge` |
-| Pediatric pneumonia | `Pneumonia` | Dataset: `paultimothymooney/chest-xray-pneumonia` |
-
-Download with the Kaggle CLI after accepting the competition rules on Kaggle:
+| SIIM-ACR Pneumothorax | `Pneumothorax` | Competition `siim-acr-pneumothorax-segmentation` |
+| RSNA Pneumonia | `Pneumonia` | Competition `rsna-pneumonia-detection-challenge` |
+| Pediatric pneumonia | `Pneumonia` | Dataset `paultimothymooney/chest-xray-pneumonia` |
 
 ```bash
 kaggle competitions download -c siim-acr-pneumothorax-segmentation
 kaggle competitions download -c rsna-pneumonia-detection-challenge
 kaggle datasets download -d paultimothymooney/chest-xray-pneumonia
-```
-
-Expected directory layouts:
-
-```text
-data/external/siim/
-  train-rle.csv
-  dicom-images-train/
-
-data/external/rsna/
-  stage_2_train_labels.csv
-  stage_2_train_images/
-
-data/external/pediatric/
-  test/NORMAL/
-  test/PNEUMONIA/
-```
-
-Run the evaluator:
-
-```bash
-python -m src.evaluate_external \
-  --run artifacts/<run> \
-  --dataset siim \
-  --data-dir data/external/siim \
-  --crop-borders
 
 python -m src.evaluate_external \
-  --run artifacts/<run> \
-  --dataset rsna \
-  --data-dir data/external/rsna \
-  --crop-borders
-
-python -m src.evaluate_external \
-  --run artifacts/<run> \
-  --dataset pediatric \
-  --data-dir data/external/pediatric \
-  --split test
+  --run artifacts/<run> --dataset siim \
+  --data-dir data/external/siim --crop-borders
 ```
 
-Each command writes `external_<dataset>_<class>.json` inside the run directory
-with AUROC, AUPRC, sensitivity, specificity, precision, counts, and invalid-image
-counts. Use `--limit 20` for a smoke test.
+RSNA images overlap NIH ChestX-ray14, so RSNA is a pneumonia/localization check,
+not an independent cohort. SIIM and the pediatric set evaluate only
+pneumothorax and pneumonia. The DICOM reader handles MONOCHROME1 inversion,
+rescale/windowing, and optional black-border cropping; corrupt and blank images
+are skipped and counted in the output JSON.
 
-Important caveats:
+## How it works
 
-- **RSNA images overlap NIH ChestX-ray14**, so RSNA is a pneumonia/localization
-  check, not an independent patient cohort.
-- SIIM and the pediatric dataset evaluate only pneumothorax and pneumonia
-  respectively; they do not provide labels for the other 12 NIH classes.
-- The evaluator reads DICOM directly, applies `MONOCHROME1` inversion,
-  rescale/windowing, and optional black-border cropping. Corrupt or blank images
-  are skipped and counted in the JSON output.
+```mermaid
+flowchart LR
+  subgraph Data
+    NIH[("NIH ChestX-ray14")]
+    Split["Patient-level 70/10/10 split"]
+    Clean["Resize, normalize, optional RAM cache"]
+  end
+  subgraph Model
+    Backbone["ConvNeXt-Base backbone"]
+    Head["14-class sigmoid head"]
+    Loss["BCEWithLogitsLoss with clamped class weights"]
+  end
+  subgraph Serving
+    API["FastAPI /api/v1/predict"]
+    CAM["HiResCAM from the last feature map"]
+    UI["React workspace"]
+  end
+  NIH --> Split --> Clean --> Backbone --> Head --> Loss
+  API --> Backbone
+  API --> CAM --> UI
+  Head --> API
+```
+
+The data path is `src/dataset.py` plus `src/splits.py`. The model is in
+`src/model.py`; `src/predictor.py` shares the inference and CAM path between the
+API and CLI. The API validates content type, upload size, and image dimensions,
+then returns 14 probabilities, the selected target, and an RGBA heatmap. The
+frontend lists every prediction, marks which ones clear their tuned threshold,
+and lets you select any finding, including one below threshold, to change the
+overlay.
+
+## Configuration
+
+### Important training flags
+
+| Flag | Default | What it does |
+|---|---:|---|
+| `--architecture` | `densenet121` | Torchvision backbone |
+| `--width`, `--height` | `320` | Square input resolution |
+| `--batch` | `64` | Micro-batch size |
+| `--accumulate` | `1` | Gradient accumulation steps; effective batch is `batch * accumulate` |
+| `--epochs` | `30` | Maximum epochs |
+| `--patience` | `5` | Early-stopping patience on validation AUROC |
+| `--val-fraction` | `0.1` | Patient-level validation fraction |
+| `--test-fraction` | `0.1` | Patient-level held-out test fraction |
+| `--cache` | off | Cache the training split in RAM |
+| `--cache-val` | off | Cache the validation split in RAM |
+| `--cache-workers` | `8` | Threads used to fill the RAM cache |
+| `--val-batch` | `0` | Validation/test batch size; 0 uses `--batch` |
+| `--workers` | `8` | DataLoader workers |
+| `--prefetch` | `2` | DataLoader prefetch factor |
+| `--no-compile` | off | Disable `torch.compile` |
+| `--no-pretrained` | off | Skip ImageNet weight download |
+| `--resume` | none | Resume from a `last.pth` checkpoint |
+
+### Backend environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CHEST_XAI_RUN` | none | Run directory to serve |
+| `CHEST_XAI_ARTIFACTS` | `artifacts` | Run root |
+| `CHEST_XAI_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated allowlist |
+| `CHEST_XAI_MAX_UPLOAD_BYTES` | `10485760` | Upload limit in bytes |
+
+### Frontend
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VITE_API_URL` | `http://localhost:8000` | Backend base URL |
 
 ## Project layout
 
-```text
-backend/            FastAPI service
-  engine.py         run loading and prediction wrapper
-  main.py           HTTP routes and upload validation
-checkpoints/        bundled DenseNet-121 demo checkpoint
-docs/               EDA, figures, reproduction notes
-frontend/           React 19 + Vite + Tailwind v4 viewer
-src/
-  dataset.py        NIH ChestX-ray14 dataset
-  download.py       Kaggle download and extraction
-  eda.py            dataset figures
-  engine.py         training/evaluation loops
-  evaluate.py       per-class metrics
-  evaluate_external.py  SIIM/RSNA/pediatric external tests
-  explain.py        HiResCAM and normalization
-  external.py       external manifests and dataset loader
-  find.py           Youden's J threshold tuning
-  imaging.py        DICOM/PNG/JPEG cleaning
-  infer.py          CLI overlay generation
-  labels.py         single label list
-  model.py          torchvision backbones
-  predictor.py      shared inference and CAM
-  report.py         training report, ROC/PR, comparisons
-  runs.py           run discovery and validation
-  splits.py         patient-level splitting
-  train.py          training entry point
-  utils.py          seeding, logging, AMP, plotting
-tests/              Python tests
-```
+| Path | Role |
+|---|---|
+| `backend/main.py` | FastAPI app, health route, upload validation |
+| `backend/engine.py` | Run loading and prediction wrapper |
+| `checkpoints/densenet121/` | Bundled demo checkpoint |
+| `frontend/src/` | React 19 workspace |
+| `src/train.py` | Training entry point, split, cache, test evaluation |
+| `src/model.py` | Torchvision backbones, ConvNeXt variants, target layer |
+| `src/predictor.py` | Shared inference and HiResCAM |
+| `src/explain.py` | HiResCAM and CAM normalization |
+| `src/splits.py` | Patient-level split |
+| `src/evaluate.py` | Per-class metrics and saved predictions |
+| `src/find.py` | Youden's J thresholds |
+| `src/conf_matrices.py` | Confusion matrices |
+| `src/report.py` | Curves, per-class bars, comparison, summary |
+| `src/external.py` | SIIM/RSNA/pediatric manifests |
+| `src/imaging.py` | DICOM/PNG/JPEG cleaning |
+| `src/evaluate_external.py` | External task evaluation CLI |
+| `src/download.py` | Kaggle download and extraction |
+| `src/compare.py`, `src/plot.py` | Older comparison and curve scripts |
+| `tests/` | Python tests for labels, splits, cache, CAM, API, external loaders |
 
-## Tests
-
-```bash
-pip install -r requirements-dev.txt
-python -m pytest
-cd frontend && npm run lint && npm run typecheck && npm run build
-```
-
-The Python tests cover label parsing, patient-disjoint splits, the HiResCAM
-formula, run resolution, API validation, the bundled checkpoint, DICOM/PNG
-cleaning, and external label manifests.
+`fetch.sh` and `push.sh` are the local-to-remote helpers used on the Vast GPU
+instance. `artifacts/` is intentionally ignored; it holds runs and checkpoints.
 
 ## Limits
 
-- Trained and evaluated only on NIH ChestX-ray14; other scanners, acquisition
+- Trained and evaluated only on NIH ChestX-ray14. Other scanners, acquisition
   protocols, and populations are untested.
-- AUPRC stays below 0.30, so rare-class precision is weak even with tuned
-  thresholds.
-- The historical runs used a single seed and no held-out test set. The current
-  code adds a test split, but the committed numbers predate it.
-- No calibration or subgroup/fairness analysis is included. External evaluation
-  scripts are provided, but the committed results do not include external test
-  numbers yet.
-- Heatmaps are qualitative. They have not been validated against radiologist
-  bounding boxes or deletion/insertion metrics.
+- Labels are mined from reports and are noisy. The model does not segment
+  lesions; HiResCAM is a coarse feature-map attribution, not a radiologist
+  bounding box.
+- AUPRC is low for rare classes. Pneumonia AUPRC is 0.059 and Fibrosis is 0.118
+  on the held-out test split.
+- The finished run used one seed and one hardware setup. The historical
+  comparison is descriptive, not a controlled ablation.
+- No calibration analysis, subgroup fairness analysis, or clinical validation is
+  included.
+- The API accepts PNG/JPEG only. DICOM support exists in the external data path,
+  not in the upload endpoint.
+- The backend has no authentication, rate limiting, or TLS. Do not expose it
+  with patient data.
+- The ConvNeXt-Base checkpoint is local under `artifacts/` and is not
+  redistributed by the repository. Only the DenseNet-121 demo checkpoint is
+  bundled.
 - A research prototype, not a diagnostic tool.
 
-See [MODEL_CARD.md](MODEL_CARD.md) for intended use, out-of-scope use, and
-ethical notes.
+## Citation
+
+```bibtex
+@inproceedings{wang2017chestxray8,
+  title     = {ChestX-ray8: Hospital-scale Chest X-ray Database and Benchmarks on Weakly-Supervised Classification and Localization of Common Thorax Diseases},
+  author    = {Wang, Xiaosong and Peng, Yifan and Lu, Le and Lu, Zhiyong and Bagheri, Mohammadhadi and Summers, Ronald M.},
+  booktitle = {CVPR},
+  year      = {2017}
+}
+```
+
+The explanation method follows Draelos and Carin, "Use HiResCAM instead of
+Grad-CAM for faithful explanations of convolutional neural networks,"
+arXiv:2011.08891, 2020.
 
 ## Stack
 
-Python · PyTorch · torchvision · FastAPI · React 19 · Tailwind v4
-
-## References
-
-- Wang et al., "ChestX-ray8: Hospital-scale Chest X-ray Database and Benchmarks
-  on Weakly-Supervised Classification and Localization of Common Thorax
-  Diseases," CVPR 2017.
-- Rajpurkar et al., "CheXNet: Radiologist-Level Pneumonia Detection on Chest
-  X-Rays with Deep Learning," arXiv:1711.05225, 2017.
-- Draelos and Carin, "Use HiResCAM instead of Grad-CAM for faithful
-  explanations of convolutional neural networks," arXiv:2011.08891, 2020.
+| Layer | Technology |
+|---|---|
+| Training | PyTorch 2.14, torchvision 0.29, torchmetrics, torchinfo |
+| Serving | FastAPI, Uvicorn, Pillow, OpenCV, pydicom |
+| Frontend | React 19, Vite 8, Tailwind CSS 4, Poppins |
+| Data | NIH ChestX-ray14 via Kaggle |
+| Reporting | Matplotlib, NumPy, FFmpeg for the demo video |
