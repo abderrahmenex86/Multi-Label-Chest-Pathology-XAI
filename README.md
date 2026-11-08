@@ -27,10 +27,32 @@ explanations and a FastAPI backend behind a single-screen React workspace.
 
 ## Results
 
+### Current 70/10/10 run
+
+A fresh ConvNeXt-Base run trained on the current **70/10/10 patient split**.
+The test set is held out and was never used for training or threshold tuning.
+
+| Model | Parameters | Resolution | Best val AUROC | Best val AUPRC | Test AUROC | Test AUPRC | Epochs |
+|---|---|---:|---:|---:|---:|---:|---:|
+| ConvNeXt-Base | 87.6 M | 384x384 | 0.8602 (epoch 7) | 0.2854 (epoch 6) | 0.8568 | 0.3061 | 11, early stop |
+
+- 89,704 training images / 11,221 validation / 11,195 held-out test images
+- 24,645 training patients / 3,080 validation / 3,080 test patients
+- Test metrics use per-class thresholds tuned on validation only
+- Test AUPRC is macro-averaged and is higher than the historical validation
+  peak, but the splits are different, so the numbers are not directly
+  comparable
+
+![Training history](docs/figs/convnext_base_training_history.png)
+
+![Run comparison](docs/figs/convnext_base_comparison.png)
+
+![Per-class test metrics](docs/figs/convnext_base_per_class.png)
+
+### Historical 80/20 runs
+
 The numbers below are **historical artifacts from an 80/20 patient split**.
-They are kept for comparison with the earlier version of the project. The
-current code defaults to a **70/10/10** patient split so a held-out test set
-exists; rerun training to produce current numbers.
+They are kept for comparison with the earlier version of the project.
 
 | Model | Parameters | Resolution | Peak val AUROC | Peak val AUPRC |
 |---|---|---:|---:|---:|
@@ -84,6 +106,24 @@ contains `optimal_thresholds.json`.
 The heatmap is generated for one selected class at a time. The UI lists all 14
 predictions, marks which ones are above their threshold, and lets you select a
 below-threshold finding to inspect its explanation.
+
+## Training vs held-out test examples
+
+Each pair shows the original radiograph on the left and the HiResCAM overlay on
+the right. Training examples were seen during training; test examples come from
+patients in the held-out test split.
+
+### Training split
+
+| Effusion (91.4%) | Mass (93.9%) |
+|---|---|
+| ![Training Effusion](docs/figs/sample_train_effusion.png) | ![Training Mass](docs/figs/sample_train_mass.png) |
+
+### Held-out test split
+
+| Cardiomegaly (82.5%) | Infiltration (86.8%) |
+|---|---|
+| ![Test Cardiomegaly](docs/figs/sample_test_cardiomegaly.png) | ![Test Infiltration](docs/figs/sample_test_infiltration.png) |
 
 ## Run it
 
