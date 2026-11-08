@@ -13,16 +13,9 @@ numbers below.
 
 [![Silent demo of Chest X-Ray Studio: title card, upload, analysis, heatmap, results card](docs/figs/demo.gif)](docs/figs/demo.mp4)
 
-_Silent 16-second demo. The interface is shown with a real held-out test image;
-the final card reports the test metrics. The full-quality MP4 is
-[`docs/figs/demo.mp4`](docs/figs/demo.mp4)._
-
 > **Research prototype.** Not a medical device and not for clinical use.
 
 ![Chest X-Ray Studio with a held-out test image and HiResCAM overlay](docs/figs/ui_workspace.png)
-
-_The white-and-green workspace after analyzing a held-out test image. The
-finding list contains all 14 predictions; the selected class drives the overlay._
 
 ## Contents
 
@@ -54,8 +47,6 @@ The test set was not used for training or threshold tuning.
 - 24,645 training patients / 3,080 validation / 3,080 test patients
 - Test AUROC and AUPRC are macro averages across the 14 classes
 - Test metrics use per-class thresholds tuned on validation only
-- Hardware: RTX 3090 24 GB, bf16 autocast, 12 dataloader workers, train/validation RAM cache
-- Training wall time to the epoch-11 stop: about 2 h 27 min
 
 ![Validation loss, AUROC, AUPRC, learning rate and epoch time](docs/figs/convnext_base_training_history.png)
 
@@ -242,22 +233,6 @@ and [effusion C](docs/figs/00020703_027_Effusion.png).
 
 ## Reproduce
 
-### Weights
-
-The repository includes a DenseNet-121 demo checkpoint at
-`checkpoints/densenet121/`. The finished ConvNeXt-Base checkpoint is
-`artifacts/2026_11_07_21_17_41_convnext_base_lr0.0001_b32_a2_r384x384_s42/best.pth`
-and is not committed because `artifacts/` is ignored.
-
-```bash
-python -m backend.main \
-  --run artifacts/2026_11_07_21_17_41_convnext_base_lr0.0001_b32_a2_r384x384_s42 \
-  --host 127.0.0.1 --port 8000
-```
-
-The model loader reads the architecture and input resolution from
-`hyperparameters.json` and does not download ImageNet weights at inference time.
-
 ### Train
 
 ```bash
@@ -322,28 +297,7 @@ are skipped and counted in the output JSON.
 
 ## How it works
 
-```mermaid
-flowchart LR
-  subgraph Data
-    NIH[("NIH ChestX-ray14")]
-    Split["Patient-level 70/10/10 split"]
-    Clean["Resize, normalize, optional RAM cache"]
-  end
-  subgraph Model
-    Backbone["ConvNeXt-Base backbone"]
-    Head["14-class sigmoid head"]
-    Loss["BCEWithLogitsLoss with clamped class weights"]
-  end
-  subgraph Serving
-    API["FastAPI /api/v1/predict"]
-    CAM["HiResCAM from the last feature map"]
-    UI["React workspace"]
-  end
-  NIH --> Split --> Clean --> Backbone --> Head --> Loss
-  API --> Backbone
-  API --> CAM --> UI
-  Head --> API
-```
+![Architecture diagram: data preparation, ConvNeXt-Base model, FastAPI serving, HiResCAM and React workspace](docs/figs/architecture.png)
 
 The data path is `src/dataset.py` plus `src/splits.py`. The model is in
 `src/model.py`; `src/predictor.py` shares the inference and CAM path between the
